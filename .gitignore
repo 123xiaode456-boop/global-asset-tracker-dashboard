@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+*.log
+data/inbox/
+data/raw/
+data/processed/*.db
+!data/processed/signals.sqlite
+data/reports/*.tmp
+.streamlit/secrets.toml

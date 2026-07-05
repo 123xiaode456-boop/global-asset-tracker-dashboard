@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>全球资产判断系统</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <h1>全球资产判断系统</h1>
+        <p id="generatedAt">加载数据中...</p>
+      </div>
+      <div class="controls">
+        <label>
+          数据集
+          <select id="datasetSelect"></select>
+        </label>
+        <label>
+          观察日期
+          <select id="dateSelect"></select>
+        </label>
+        <label class="search">
+          搜索
+          <input id="assetSearch" type="search" placeholder="代码 / 中文 / 英文名称" />
+        </label>
+      </div>
+    </header>
+
+    <main>
+      <section class="metrics" id="metrics"></section>
+
+      <section class="grid two">
+        <article>
+          <h2>做多机会排名</h2>
+          <div id="longTable"></div>
+        </article>
+        <article>
+          <h2>做空 / 风险机会排名</h2>
+          <div id="shortTable"></div>
+        </article>
+      </section>
+
+      <section class="grid two">
+        <article>
+          <h2>重点观察</h2>
+          <div id="focusTable"></div>
+        </article>
+        <article>
+          <h2>风险观察</h2>
+          <div id="riskTable"></div>
+        </article>
+      </section>
+
+      <section>
+        <h2>资产表</h2>
+        <div id="assetTable"></div>
+      </section>
+
+      <section>
+        <h2>期货品种四象限位置变化</h2>
+        <p class="hint">每个小图展示一个期货品种在四象限中的位置移动曲线。</p>
+        <div id="futuresCharts"></div>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

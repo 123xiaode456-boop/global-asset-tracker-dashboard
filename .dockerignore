@@ -1,0 +1,10 @@
+.venv
+__pycache__
+.pytest_cache
+*.pyc
+*.log
+data/inbox
+data/raw
+.streamlit/secrets.toml
+dashboard_stdout.log
+dashboard_stderr.log

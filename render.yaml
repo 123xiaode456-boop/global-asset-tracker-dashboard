@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: global-asset-tracker
+    runtime: docker
+    plan: starter
+    autoDeploy: true
+    envVars:
+      - key: PYTHONUTF8
+        value: "1"
+      - key: PYTHONPATH
+        value: /app/src
+      - key: STREAMLIT_BROWSER_GATHER_USAGE_STATS
+        value: "false"
