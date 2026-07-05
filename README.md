@@ -76,9 +76,16 @@ ASSET_TRACKER_PASSWORD=你的密码
 
 如果要像“国内商品期货波动率网页”一样通过 GitHub Pages 发公网链接，使用静态版：
 
+公网地址：
+
+```text
+https://123xiaode456-boop.github.io/global-asset-tracker-dashboard/
+```
+
 ```powershell
 $env:PYTHONPATH="D:\Workspace\project-027-全球资产判断系统跟踪总结\工程内容\src"
 .\.venv\Scripts\python.exe .\src\export_static_site.py
+.\.venv\Scripts\python.exe .\scripts\publish_static_pages.py
 ```
 
 输出目录：
