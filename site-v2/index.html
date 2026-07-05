@@ -3,14 +3,14 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>全球资产判断系统 v2</title>
+    <title>商品数据面板 v2</title>
     <link rel="stylesheet" href="./styles.css" />
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   </head>
   <body>
     <header class="topbar">
       <div>
-        <h1>全球资产判断系统 v2</h1>
+        <h1>商品数据面板 v2</h1>
         <p id="generatedAt">加载数据中...</p>
       </div>
       <div class="controls">
@@ -23,7 +23,7 @@
           <select id="dateSelect"></select>
         </label>
         <label class="search">
-          搜索
+          选中标的
           <input id="assetSearch" type="search" placeholder="代码 / 中文 / 英文名称" />
         </label>
       </div>
@@ -32,19 +32,21 @@
     <main>
       <section class="notice">
         <strong>v2 说明</strong>
-        <span>原版站点保留不动。当前版本按 Excel 表格逐项搭建；排序、bar 标注、均线和多空判断已按确认口径执行。</span>
+        <span>当前版本只看商品核心数据集。顶部先列出三类持续时间等于 1 的商品标的；搜索面板只展示数据总表里的关键字段。</span>
       </section>
 
       <section class="metrics" id="metrics"></section>
+
+      <section id="barAlerts"></section>
 
       <section>
         <h2>一、做多标的筛选</h2>
         <p class="requirement">（比价improving/lead+资金加杠杆+周k上行+日k上行）</p>
         <p class="chart-request">【筛选出标的矩阵表格 含持续bar等 小到大排列 并特别标注bar为1的标的】</p>
-        <p class="rule">排序：先按比价状态持续 bar，再按资金状态持续 bar，最后按日趋势持续 bar；任意持续时间字段等于 1 均标注。</p>
+        <p class="rule">排序：按当前比价状态持续时间从小到大；当前比价状态持续时间等于 1 的标的标黄。</p>
         <div id="longMatrix"></div>
         <p class="chart-request">【筛选出的标的的日k和周k图 含均线】</p>
-        <p class="rule">均线：5 / 10 / 60 / 250。缺行情标的单独列出。</p>
+        <p class="rule">均线：5 / 10 / 20 / 60 / 250。缺行情标的单独列出。</p>
         <div id="longKlinePanel"></div>
       </section>
 
@@ -52,10 +54,10 @@
         <h2>二、做空标的筛选</h2>
         <p class="requirement">（比价weakening/lag+资金去杠杆+周k下行+日k下行）</p>
         <p class="chart-request">【筛选出标的矩阵表格 含持续bar等 小到大排列 并特别标注bar为1的标的】</p>
-        <p class="rule">排序：先按比价状态持续 bar，再按资金状态持续 bar，最后按日趋势持续 bar；任意持续时间字段等于 1 均标注。</p>
+        <p class="rule">排序：按当前比价状态持续时间从小到大；当前比价状态持续时间等于 1 的标的标黄。</p>
         <div id="shortMatrix"></div>
         <p class="chart-request">【筛选出的标的的日k和周k图 含均线】</p>
-        <p class="rule">均线：5 / 10 / 60 / 250。缺行情标的单独列出。</p>
+        <p class="rule">均线：5 / 10 / 20 / 60 / 250。缺行情标的单独列出。</p>
         <div id="shortKlinePanel"></div>
       </section>
 
@@ -65,7 +67,7 @@
         <p class="rule">纵轴使用数据总表“当前比价状态涨幅”列。</p>
         <div id="relativeCrossSection" class="wide-chart"></div>
         <p class="chart-request">【四象限一个月轨迹线 化工/农/有色】</p>
-        <p class="rule">按当前日期往前一个月内所有已有数据绘制；包含化工品、农产品、有色、贵金属。</p>
+        <p class="rule">按当前日期往前 30 自然日内所有已有数据绘制；包含化工品、农产品、有色、贵金属。</p>
         <div id="monthlyTrajectories"></div>
       </section>
 
@@ -87,7 +89,7 @@
       <section>
         <h2>五、搜索</h2>
         <p class="chart-request">【输入关键字 显示所有相关标的的面板数据 并给出判断多空】</p>
-        <p class="rule">面板展示数据总表中相关标的的单独行，并按做多/做空规则给出判断；无趋势或规则不满足为观望。</p>
+        <p class="rule">面板展示商品数据总表中相关标的的单独行：当前比价状态持续时间、当前比价状态、当前比价状态涨幅、日/周/月趋势及持续时间、当前杠杆资金状态持续时间、当前杠杆资金状态，并给出多空/观望。</p>
         <div id="searchPanel"></div>
       </section>
     </main>

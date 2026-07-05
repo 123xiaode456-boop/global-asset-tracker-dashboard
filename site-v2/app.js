@@ -1,6 +1,6 @@
 const state = {
   data: null,
-  datasetKey: "all",
+  datasetKey: "core",
   date: "",
   search: "",
 };
@@ -13,50 +13,42 @@ const GROUP_COLORS = {
 };
 
 const REQUIRED_FUTURES_GROUPS = ["化工品", "农产品", "有色", "贵金属"];
-const MA_WINDOWS = [5, 10, 60, 250];
+const MA_WINDOWS = [5, 10, 20, 60, 250];
 
 const MATRIX_COLUMNS = [
   ["flag", "标注"],
   ["asset_code", "代码"],
   ["asset_name_cn", "中文名"],
   ["asset_name", "英文名"],
+  ["relative_state_duration", "比价持续"],
+  ["relative_state", "比价状态"],
+  ["relative_state_return", "比价状态涨幅"],
   ["day_trend", "日K"],
   ["day_trend_duration", "日K bar"],
   ["week_trend", "周K"],
   ["week_trend_duration", "周K bar"],
   ["month_trend", "月K"],
   ["month_trend_duration", "月K bar"],
-  ["relative_state", "比价状态"],
-  ["relative_state_duration", "比价bar"],
-  ["relative_state_return", "比价状态涨幅"],
-  ["capital_state", "资金状态"],
   ["capital_state_duration", "资金bar"],
-  ["capital_daily_change", "资金日变化"],
-  ["capital_value", "资金值"],
+  ["capital_state", "资金状态"],
 ];
 
 const SEARCH_COLUMNS = [
   ["asset_code", "代码"],
   ["asset_name_cn", "中文名"],
   ["asset_name", "英文名"],
-  ["dataset_date", "日期"],
-  ["dataset_type", "数据集"],
   ["decision", "判断多空"],
+  ["relative_state_duration", "比价bar"],
+  ["relative_state", "比价"],
+  ["relative_state_return", "比价状态涨幅"],
   ["day_trend", "日K"],
   ["day_trend_duration", "日K bar"],
   ["week_trend", "周K"],
   ["week_trend_duration", "周K bar"],
   ["month_trend", "月K"],
   ["month_trend_duration", "月K bar"],
-  ["relative_state", "比价"],
-  ["relative_state_duration", "比价bar"],
-  ["relative_state_return", "比价状态涨幅"],
-  ["capital_state", "资金"],
   ["capital_state_duration", "资金bar"],
-  ["capital_daily_change", "资金日变化"],
-  ["capital_value", "资金值"],
-  ["relative_strength", "相对强度"],
-  ["strength_momentum", "强度动量"],
+  ["capital_state", "资金"],
 ];
 
 async function main() {
@@ -68,12 +60,10 @@ async function main() {
 
 function initControls() {
   const datasetSelect = document.querySelector("#datasetSelect");
-  datasetSelect.innerHTML = [
-    `<option value="all">全部</option>`,
-    ...state.data.datasetTypes.map((type) => `<option value="${escapeHtml(type)}">${escapeHtml(type)}</option>`),
-  ].join("");
+  datasetSelect.innerHTML = `<option value="core">核心数据集</option>`;
+  datasetSelect.value = "core";
   datasetSelect.addEventListener("change", () => {
-    state.datasetKey = datasetSelect.value;
+    state.datasetKey = "core";
     const dates = datesForCurrentDataset();
     state.date = dates.at(-1) || "";
     syncDateSelect();
@@ -114,11 +104,12 @@ function render() {
   document.querySelector("#generatedAt").textContent = `数据生成：${state.data.generatedAt}；当前日期：${state.date || "-"}`;
   if (!snapshot) return;
 
-  const rows = snapshot.latestRows || [];
+  const rows = currentCommodityRows(snapshot.latestRows || []);
   const longRows = filterLong(rows);
   const shortRows = filterShort(rows);
 
   renderMetrics(snapshot, longRows, shortRows);
+  renderBarAlerts(rows);
   document.querySelector("#longMatrix").innerHTML = tableHtml(sortPreview(longRows), MATRIX_COLUMNS);
   document.querySelector("#shortMatrix").innerHTML = tableHtml(sortPreview(shortRows), MATRIX_COLUMNS);
   renderKlinePanel("#longKlinePanel", sortPreview(longRows));
@@ -130,17 +121,76 @@ function render() {
 }
 
 function renderMetrics(snapshot, longRows, shortRows) {
-  const counts = snapshot.latestCounts || {};
+  const commodityTotal = currentCommodityRows(snapshot.latestRows || []).length;
   const items = [
     ["日期", snapshot.latestDate || "-"],
-    ["全部标的", counts.total || 0],
+    ["商品标的", commodityTotal],
+    ["bar=1提醒", barAlertRows(currentCommodityRows(snapshot.latestRows || [])).length],
     ["做多筛选", longRows.length],
     ["做空筛选", shortRows.length],
-    ["数据集", state.datasetKey === "all" ? "全部" : state.datasetKey],
   ];
   document.querySelector("#metrics").innerHTML = items
     .map(([label, value]) => `<div class="metric"><span>${label}</span><strong>${value}</strong></div>`)
     .join("");
+}
+
+function currentCommodityRows(rows) {
+  const { keys, codes } = commodityAssetIdentifiersForCurrentDate();
+  if (!keys.size && !codes.size) return [];
+  return rows.filter((row) => {
+    const key = text(row.asset_key);
+    if (key) return keys.has(key);
+    return codes.has(text(row.asset_code));
+  });
+}
+
+function commodityAssetIdentifiersForCurrentDate() {
+  const items = state.data?.futuresByDate?.[state.date] || [];
+  const filtered = items.filter((item) => REQUIRED_FUTURES_GROUPS.includes(item.group));
+  return {
+    keys: new Set(filtered.map((item) => text(item.assetKey)).filter(Boolean)),
+    codes: new Set(filtered.map((item) => text(item.assetCode)).filter(Boolean)),
+  };
+}
+
+function renderBarAlerts(rows) {
+  const alertRows = barAlertRows(rows).map((row) => ({ ...row, alert_reason: barOneReasons(row).join(" / ") }));
+  const columns = [
+    ["alert_reason", "触发"],
+    ["asset_code", "代码"],
+    ["asset_name_cn", "中文名"],
+    ["asset_name", "英文名"],
+    ["relative_state_duration", "比价bar"],
+    ["relative_state", "比价状态"],
+    ["relative_state_return", "比价状态涨幅"],
+    ["day_trend", "日K"],
+    ["day_trend_duration", "日K bar"],
+    ["capital_state_duration", "资金bar"],
+    ["capital_state", "资金状态"],
+  ];
+  document.querySelector("#barAlerts").innerHTML = `
+    <h2>今日 bar=1 提醒</h2>
+    <p class="rule">当天商品标的中，当前比价状态持续时间、日级别趋势持续时间、当前杠杆资金状态持续时间任意一个等于 1 就列入。</p>
+    ${tableHtml(alertRows, columns)}
+  `;
+}
+
+function barAlertRows(rows) {
+  return rows.filter((row) => barOneReasons(row).length).sort(
+    (a, b) =>
+      number(a.relative_state_duration) - number(b.relative_state_duration) ||
+      number(a.day_trend_duration) - number(b.day_trend_duration) ||
+      number(a.capital_state_duration) - number(b.capital_state_duration) ||
+      text(a.asset_code).localeCompare(text(b.asset_code))
+  );
+}
+
+function barOneReasons(row) {
+  const reasons = [];
+  if (number(row.relative_state_duration) === 1) reasons.push("比价=1");
+  if (number(row.day_trend_duration) === 1) reasons.push("日K=1");
+  if (number(row.capital_state_duration) === 1) reasons.push("资金=1");
+  return reasons;
 }
 
 function filterLong(rows) {
@@ -171,8 +221,6 @@ function sortPreview(rows) {
   return [...rows].sort(
     (a, b) =>
       number(a.relative_state_duration) - number(b.relative_state_duration) ||
-      number(a.capital_state_duration) - number(b.capital_state_duration) ||
-      number(a.day_trend_duration) - number(b.day_trend_duration) ||
       text(a.asset_code).localeCompare(text(b.asset_code))
   );
 }
@@ -263,6 +311,7 @@ function renderTrendBars() {
   const latestCoreDate = (state.data.datesByType.core || []).at(-1);
   const dates = (state.data.datesByType.core || []).filter((date) => date >= monthCutoff(latestCoreDate));
   const latestFutures = state.data.futuresByDate[latestCoreDate] || [];
+  const byKey = new Map(latestFutures.map((item) => [item.assetKey, item.group]));
   const byCode = new Map(latestFutures.map((item) => [item.assetCode, item.group]));
   document.querySelector("#trendBars").innerHTML = REQUIRED_FUTURES_GROUPS
     .map((group) => `<h3 class="group-title">${group}</h3><div class="wide-chart" id="trend-${slug(group)}"></div>`)
@@ -272,7 +321,7 @@ function renderTrendBars() {
     const traces = ["day", "week", "month"].map((period) => {
       const values = dates.map((date) => {
         const snapshot = state.data.snapshots[`core|${date}`];
-        const rows = (snapshot?.latestRows || []).filter((row) => byCode.get(row.asset_code) === group);
+        const rows = (snapshot?.latestRows || []).filter((row) => (byKey.get(row.asset_key) || byCode.get(row.asset_code)) === group);
         return sumTrendBars(rows, period);
       });
       return { type: "bar", name: periodLabel(period), x: dates, y: values };
@@ -296,7 +345,7 @@ function renderSearch() {
   const snapshot = currentSnapshot();
   if (!snapshot) return;
   const query = state.search;
-  const rows = (snapshot.latestRows || [])
+  const rows = currentCommodityRows(snapshot.latestRows || [])
     .filter((row) => !query || [row.asset_code, row.asset_name_cn, row.asset_name, row.asset_key].filter(Boolean).join(" ").toLowerCase().includes(query))
     .slice(0, 200)
     .map((row) => ({ ...row, decision: decisionLabel(row) }));
@@ -309,18 +358,18 @@ function tableHtml(rows, cols) {
   if (!rows.length) return `<div class="empty">暂无数据</div>`;
   const head = cols.map(([, label]) => `<th>${escapeHtml(label)}</th>`).join("");
   const body = rows
-    .map((row) => `<tr class="${hasAnyBarOne(row) ? "bar-one" : ""}">${cols.map(([key]) => `<td>${formatCell(key, row)}</td>`).join("")}</tr>`)
+    .map((row) => `<tr class="${hasRelativeStateBarOne(row) ? "bar-one" : ""}">${cols.map(([key]) => `<td>${formatCell(key, row)}</td>`).join("")}</tr>`)
     .join("");
   return `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
 function formatCell(key, row) {
-  if (key === "flag") return hasAnyBarOne(row) ? `<span class="tag hot">bar=1</span>` : "";
+  if (key === "flag") return hasRelativeStateBarOne(row) ? `<span class="tag hot">比价bar=1</span>` : "";
   const value = row[key];
   if (value === null || value === undefined || value === "") return "";
   if (typeof value === "number") return Number.isInteger(value) ? String(value) : value.toFixed(2);
   if (key === "decision") return `<span class="tag ${decisionClass(value)}">${escapeHtml(value)}</span>`;
-  if (key.endsWith("_duration") && number(value) === 1) return `<span class="tag hot">1</span>`;
+  if (key === "relative_state_duration" && number(value) === 1) return `<span class="tag hot">1</span>`;
   return escapeHtml(String(value));
 }
 
@@ -470,7 +519,7 @@ function periodLabel(period) {
 function monthCutoff(dateText) {
   const [year, month, day] = String(dateText).split("-").map(Number);
   const date = new Date(year, month - 1, day);
-  date.setMonth(date.getMonth() - 1);
+  date.setDate(date.getDate() - 30);
   return formatDate(date);
 }
 
@@ -483,7 +532,11 @@ function formatDate(date) {
 }
 
 function hasAnyBarOne(row) {
-  return ["relative_state_duration", "capital_state_duration", "day_trend_duration", "week_trend_duration", "month_trend_duration"].some((key) => number(row[key]) === 1);
+  return ["relative_state_duration", "day_trend_duration", "capital_state_duration"].some((key) => number(row[key]) === 1);
+}
+
+function hasRelativeStateBarOne(row) {
+  return number(row.relative_state_duration) === 1;
 }
 
 function decisionLabel(row) {

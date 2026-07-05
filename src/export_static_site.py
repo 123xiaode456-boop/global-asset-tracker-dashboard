@@ -17,24 +17,28 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_SITE_DIR = PROJECT_ROOT / "site"
 
 
-def export_static_site(db_path: str | Path = DEFAULT_DB, site_dir: str | Path = DEFAULT_SITE_DIR) -> Path:
+def export_static_site(
+    db_path: str | Path = DEFAULT_DB,
+    site_dir: str | Path = DEFAULT_SITE_DIR,
+    commodity_only: bool = False,
+) -> Path:
     db_path = Path(db_path)
     site_dir = Path(site_dir)
     data_dir = site_dir / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
 
-    payload = build_static_payload(db_path)
+    payload = build_static_payload(db_path, commodity_only=commodity_only)
     output = data_dir / "app-data.json"
     output.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     return output
 
 
-def build_static_payload(db_path: str | Path) -> dict[str, Any]:
+def build_static_payload(db_path: str | Path, commodity_only: bool = False) -> dict[str, Any]:
     db = AssetDatabase(db_path)
     db.initialize()
     all_snapshot = load_dashboard_snapshot(db_path)
-    dataset_types = all_snapshot.dataset_types
-    dataset_options: list[str | None] = [None, *dataset_types]
+    dataset_types = ["core"] if commodity_only else all_snapshot.dataset_types
+    dataset_options: list[str | None] = ["core"] if commodity_only else [None, *dataset_types]
 
     snapshots: dict[str, Any] = {}
     dates_by_type: dict[str, list[str]] = {}
@@ -64,19 +68,19 @@ def build_static_payload(db_path: str | Path) -> dict[str, Any]:
             for item in trajectories
         ]
 
+    payload = {
+        "generatedAt": datetime.now().isoformat(timespec="seconds"),
+        "datasetTypes": dataset_types,
+        "datesByType": dates_by_type,
+        "snapshots": snapshots,
+        "futuresByDate": futures_by_date,
+    }
+    if commodity_only:
+        _filter_payload_to_commodities(payload, rows_for_prices)
     price_histories, price_coverage = _price_payloads(db, rows_for_prices)
-
-    return _clean(
-        {
-            "generatedAt": datetime.now().isoformat(timespec="seconds"),
-            "datasetTypes": dataset_types,
-            "datesByType": dates_by_type,
-            "snapshots": snapshots,
-            "futuresByDate": futures_by_date,
-            "priceHistories": price_histories,
-            "priceCoverage": price_coverage,
-        }
-    )
+    payload["priceHistories"] = price_histories
+    payload["priceCoverage"] = price_coverage
+    return _clean(payload)
 
 
 def _snapshot_payload(snapshot) -> dict[str, Any]:
@@ -92,6 +96,29 @@ def _snapshot_payload(snapshot) -> dict[str, Any]:
         "longOpportunities": snapshot.long_opportunities,
         "shortOpportunities": snapshot.short_opportunities,
     }
+
+
+def _filter_payload_to_commodities(payload: dict[str, Any], rows_for_prices: dict[str, dict[str, Any]]) -> None:
+    allowed_keys: set[str] = set()
+    futures_by_date = payload.get("futuresByDate", {})
+    for items in futures_by_date.values():
+        allowed_keys.update(str(item.get("assetKey") or "") for item in items)
+    allowed_keys.discard("")
+
+    snapshots = payload.get("snapshots", {})
+    for key, snapshot in list(snapshots.items()):
+        rows = [row for row in snapshot.get("latestRows", []) if str(row.get("asset_key") or "") in allowed_keys]
+        snapshot["latestRows"] = rows
+        snapshot["latestCounts"] = dict(snapshot.get("latestCounts") or {})
+        snapshot["latestCounts"]["total"] = len(rows)
+        for list_key in ("focusWatch", "riskWatch", "longOpportunities", "shortOpportunities"):
+            snapshot[list_key] = [
+                row for row in snapshot.get(list_key, []) if str(row.get("asset_key") or "") in allowed_keys
+            ]
+
+    for asset_key in list(rows_for_prices):
+        if asset_key not in allowed_keys:
+            rows_for_prices.pop(asset_key, None)
 
 
 def _price_payloads(
@@ -146,8 +173,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Export the dashboard SQLite data to a static GitHub Pages site.")
     parser.add_argument("--db", default=str(DEFAULT_DB), help="SQLite database path.")
     parser.add_argument("--site-dir", default=str(DEFAULT_SITE_DIR), help="Static site output directory.")
+    parser.add_argument("--commodity-only", action="store_true", help="Export only commodity core rows for the v2 static site.")
     args = parser.parse_args(argv)
-    output = export_static_site(args.db, args.site_dir)
+    output = export_static_site(args.db, args.site_dir, commodity_only=args.commodity_only)
     print(f"exported: {output}")
     return 0
 
