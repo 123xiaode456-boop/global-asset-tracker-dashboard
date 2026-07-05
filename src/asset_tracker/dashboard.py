@@ -17,6 +17,21 @@ from .market_data import build_symbol_mapping_queue
 from .navigation import render_futures_entry, render_navigation
 
 
+RELATIVE_STATE_QUADRANTS = {
+    "improving": {"label": "Improving", "x_sign": -1, "y_sign": 1},
+    "lead": {"label": "Leading", "x_sign": 1, "y_sign": 1},
+    "leading": {"label": "Leading", "x_sign": 1, "y_sign": 1},
+    "lag": {"label": "Lagging", "x_sign": -1, "y_sign": -1},
+    "lagging": {"label": "Lagging", "x_sign": -1, "y_sign": -1},
+    "weakening": {"label": "Weakening", "x_sign": 1, "y_sign": -1},
+}
+
+RETURN_DIRECTIONS = {
+    "up": {"name": "上涨", "color": "#cf222e"},
+    "down": {"name": "下跌", "color": "#1a7f37"},
+}
+
+
 def run_app(default_db: str | Path = DEFAULT_DB) -> None:
     st.set_page_config(page_title="全球资产判断系统", layout="wide")
     st.title("全球资产判断系统")
@@ -344,25 +359,24 @@ def _quadrant_figure(points: list[QuadrantPoint]) -> go.Figure:
 
 def _market_quadrant_figure(rows: list[dict[str, Any]], show_labels: bool = False) -> go.Figure:
     fig = go.Figure()
-    axis_limit = _market_axis_limit(rows)
-    _add_quadrant_background(fig, axis_limit)
-    grouped: dict[str, dict[str, Any]] = {
-        "long": {"name": "可做多", "color": "#2da44e", "x": [], "y": [], "text": [], "customdata": []},
-        "short": {"name": "可做空", "color": "#cf222e", "x": [], "y": [], "text": [], "customdata": []},
-        "wait": {"name": "不做/观望", "color": "#8c959f", "x": [], "y": [], "text": [], "customdata": []},
-    }
+    plotted_points = []
     for row in rows:
-        relative_strength = _to_float(row.get("relative_strength"))
-        strength_momentum = _to_float(row.get("strength_momentum"))
-        if relative_strength is None or strength_momentum is None:
+        point = _relative_state_market_point(row)
+        if point is None:
             continue
-        x = round(relative_strength - 100.0, 6)
-        y = round(strength_momentum - 100.0, 6)
-        decision = classify_trade_decision(row)
-        group = grouped.get(decision.action, grouped["wait"])
-        quadrant = classify_quadrant(x, y)
-        group["x"].append(x)
-        group["y"].append(y)
+        plotted_points.append((row, point))
+
+    x_axis = _mirrored_axis([abs(point["x"]) for _, point in plotted_points], min_outer=1.0)
+    y_axis = _mirrored_axis([abs(point["y"]) for _, point in plotted_points], min_outer=1.0)
+    _add_quadrant_background_xy(fig, x_axis["outer"], y_axis["outer"])
+    grouped: dict[str, dict[str, Any]] = {
+        direction: {"name": config["name"], "color": config["color"], "x": [], "y": [], "text": [], "customdata": []}
+        for direction, config in RETURN_DIRECTIONS.items()
+    }
+    for row, point in plotted_points:
+        group = grouped[point["direction"]]
+        group["x"].append(point["x"])
+        group["y"].append(point["y"])
         display_name = display_asset_name(row)
         group["text"].append(display_name or str(row.get("asset_name") or row.get("asset_code") or ""))
         group["customdata"].append(
@@ -371,11 +385,11 @@ def _market_quadrant_figure(rows: list[dict[str, Any]], show_labels: bool = Fals
                 row.get("asset_code"),
                 display_name or row.get("asset_name"),
                 row.get("asset_name"),
-                decision.label,
-                quadrant,
                 row.get("relative_state"),
-                relative_strength,
-                strength_momentum,
+                point["quadrant"],
+                point["duration"],
+                point["return_value"],
+                group["name"],
             ]
         )
     mode = "markers+text" if show_labels else "markers"
@@ -396,13 +410,11 @@ def _market_quadrant_figure(rows: list[dict[str, Any]], show_labels: bool = Fals
                     "代码=%{customdata[1]}<br>"
                     "中文名称=%{customdata[2]}<br>"
                     "原始名称=%{customdata[3]}<br>"
-                    "当天结论=%{customdata[4]}<br>"
+                    "比价状态=%{customdata[4]}<br>"
                     "象限=%{customdata[5]}<br>"
-                    "比价状态=%{customdata[6]}<br>"
-                    "RS-100=%{x:.2f}<br>"
-                    "动量-100=%{y:.2f}<br>"
-                    "相对强度=%{customdata[7]:.2f}<br>"
-                    "强度动量=%{customdata[8]:.2f}<extra></extra>"
+                    "持续时间=%{customdata[6]}<br>"
+                    "涨跌幅=%{customdata[7]:.2f}<br>"
+                    "方向=%{customdata[8]}<extra></extra>"
                 ),
             )
         )
@@ -426,21 +438,84 @@ def _market_quadrant_figure(rows: list[dict[str, Any]], show_labels: bool = Fals
     fig.update_layout(
         height=620,
         margin=dict(l=30, r=20, t=25, b=35),
-        xaxis_title="相对强度 - 100",
-        yaxis_title="强度动量 - 100",
+        xaxis_title="当前比价状态持续时间（左右均为正值）",
+        yaxis_title="当前比价状态涨跌幅绝对值（上下均为正值）",
         legend=dict(orientation="h"),
     )
-    fig.update_xaxes(range=[-axis_limit, axis_limit], zeroline=False)
-    fig.update_yaxes(range=[-axis_limit, axis_limit], zeroline=False, scaleanchor="x", scaleratio=1)
+    fig.update_xaxes(
+        range=[-x_axis["outer"], x_axis["outer"]],
+        tickvals=x_axis["tickvals"],
+        ticktext=x_axis["ticktext"],
+        zeroline=False,
+    )
+    fig.update_yaxes(
+        range=[-y_axis["outer"], y_axis["outer"]],
+        tickvals=y_axis["tickvals"],
+        ticktext=y_axis["ticktext"],
+        zeroline=False,
+    )
     return fig
 
 
+def _relative_state_market_point(row: dict[str, Any]) -> dict[str, Any] | None:
+    state = str(row.get("relative_state") or "").strip().lower()
+    config = RELATIVE_STATE_QUADRANTS.get(state)
+    duration = _to_float(row.get("relative_state_duration"))
+    return_value = _to_float(row.get("relative_state_return"))
+    if config is None or duration is None or return_value is None:
+        return None
+    return {
+        "x": config["x_sign"] * abs(duration),
+        "y": config["y_sign"] * abs(return_value),
+        "direction": "up" if return_value >= 0 else "down",
+        "quadrant": config["label"],
+        "duration": abs(duration),
+        "return_value": return_value,
+    }
+
+
+def _mirrored_axis(values: list[float], *, min_outer: float) -> dict[str, Any]:
+    outer = _nice_axis_outer(max([abs(value) for value in values] + [min_outer]))
+    middle = _nice_axis_tick(outer / 2)
+    return {
+        "outer": outer,
+        "tickvals": [-outer, -middle, 0, middle, outer],
+        "ticktext": [_format_tick(outer), _format_tick(middle), "0", _format_tick(middle), _format_tick(outer)],
+    }
+
+
+def _nice_axis_outer(value: float) -> float:
+    if value <= 0:
+        return 1.0
+    return _nice_axis_tick(value * 1.15)
+
+
+def _nice_axis_tick(value: float) -> float:
+    if value >= 20:
+        return float(int((value + 4) // 5 * 5))
+    if value >= 5:
+        return float(int(value + 0.999999))
+    if value >= 1:
+        return float(int(value * 2 + 0.999999) / 2)
+    return float(int(value * 10 + 0.999999) / 10)
+
+
+def _format_tick(value: float) -> str:
+    if float(value).is_integer():
+        return str(int(value))
+    return f"{value:.2f}".rstrip("0").rstrip(".")
+
+
 def _add_quadrant_background(fig: go.Figure, axis_limit: float) -> None:
+    _add_quadrant_background_xy(fig, axis_limit, axis_limit)
+
+
+def _add_quadrant_background_xy(fig: go.Figure, x_axis_limit: float, y_axis_limit: float) -> None:
     quadrants = [
-        (0, 0, axis_limit, axis_limit, "rgba(46, 160, 67, 0.08)"),
-        (-axis_limit, 0, 0, axis_limit, "rgba(9, 105, 218, 0.08)"),
-        (-axis_limit, -axis_limit, 0, 0, "rgba(207, 34, 46, 0.07)"),
-        (0, -axis_limit, axis_limit, 0, "rgba(191, 135, 0, 0.08)"),
+        (0, 0, x_axis_limit, y_axis_limit, "rgba(46, 160, 67, 0.08)"),
+        (-x_axis_limit, 0, 0, y_axis_limit, "rgba(9, 105, 218, 0.08)"),
+        (-x_axis_limit, -y_axis_limit, 0, 0, "rgba(207, 34, 46, 0.07)"),
+        (0, -y_axis_limit, x_axis_limit, 0, "rgba(191, 135, 0, 0.08)"),
     ]
     for x0, y0, x1, y1, color in quadrants:
         fig.add_shape(

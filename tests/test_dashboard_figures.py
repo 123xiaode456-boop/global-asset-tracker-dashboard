@@ -68,51 +68,57 @@ def test_unique_asset_rows_deduplicates_dropdown_assets():
     assert unique[0]["dataset_type"] == "core"
 
 
-def test_market_quadrant_figure_plots_latest_asset_positions_by_decision():
+def test_market_quadrant_figure_places_assets_by_relative_state_and_colors_by_return_direction():
     rows = [
         {
             "asset_key": "AAA|Alpha",
             "asset_code": "AAA",
             "asset_name": "Alpha",
             "dataset_date": "2026-06-18",
-            "day_trend": "上行趋势",
-            "relative_strength": 106.0,
-            "strength_momentum": 104.0,
             "relative_state": "lead",
+            "relative_state_duration": 3,
+            "relative_state_return": 2.5,
         },
         {
             "asset_key": "BBB|Beta",
             "asset_code": "BBB",
             "asset_name": "Beta",
             "dataset_date": "2026-06-18",
-            "day_trend": "下行趋势",
-            "relative_strength": 95.0,
-            "strength_momentum": 96.0,
             "relative_state": "Lag",
+            "relative_state_duration": 5,
+            "relative_state_return": -1.25,
         },
         {
             "asset_key": "CCC|Cash",
             "asset_code": "CCC",
             "asset_name": "Cash",
             "dataset_date": "2026-06-18",
-            "day_trend": "无趋势",
-            "relative_strength": 101.0,
-            "strength_momentum": 97.0,
             "relative_state": "Weakening",
+            "relative_state_duration": 2,
+            "relative_state_return": 0.75,
+        },
+        {
+            "asset_key": "DDD|Delta",
+            "asset_code": "DDD",
+            "asset_name": "Delta",
+            "dataset_date": "2026-06-18",
+            "relative_state": "improving",
+            "relative_state_duration": 4,
+            "relative_state_return": -3.0,
         },
     ]
 
     figure = _market_quadrant_figure(rows, show_labels=True)
 
-    assert [trace.name for trace in figure.data] == ["可做多", "可做空", "不做/观望"]
-    assert list(figure.data[0].x) == [6.0]
-    assert list(figure.data[0].y) == [4.0]
-    assert list(figure.data[0].text) == ["Alpha"]
-    assert list(figure.data[1].x) == [-5.0]
-    assert list(figure.data[1].y) == [-4.0]
-    assert list(figure.data[2].x) == [1.0]
-    assert list(figure.data[2].y) == [-3.0]
+    assert [trace.name for trace in figure.data] == ["上涨", "下跌"]
+    assert list(figure.data[0].x) == [3.0, 2.0]
+    assert list(figure.data[0].y) == [2.5, -0.75]
+    assert list(figure.data[0].text) == ["Alpha", "Cash"]
+    assert list(figure.data[1].x) == [-5.0, -4.0]
+    assert list(figure.data[1].y) == [-1.25, 3.0]
     assert "Leading" in [annotation.text for annotation in figure.layout.annotations]
+    assert figure.layout.xaxis.title.text == "当前比价状态持续时间（左右均为正值）"
+    assert figure.layout.yaxis.title.text == "当前比价状态涨跌幅绝对值（上下均为正值）"
 
 
 def test_asset_labels_prefer_chinese_name_and_keep_original_name():
@@ -188,10 +194,9 @@ def test_market_quadrant_figure_uses_chinese_label_when_available():
             "asset_name": "Gold Futures",
             "asset_name_cn": "黄金期货",
             "dataset_date": "2026-06-18",
-            "day_trend": "上行趋势",
-            "relative_strength": 106.0,
-            "strength_momentum": 104.0,
             "relative_state": "lead",
+            "relative_state_duration": 3,
+            "relative_state_return": 2.5,
         },
     ]
 

@@ -54,6 +54,8 @@ globalThis.__api = {
   monthCutoff,
   selectedCoreDate,
   coreDatesInLast30Days,
+  renderRelativeCrossSection,
+  relativeStatePoint,
   selectedQuadrantGroup,
   selectQuadrantGroup,
   renderMonthlyTrajectories,
@@ -101,6 +103,44 @@ assert.strictEqual(api.decisionLabel(rows[0]), "可做多");
 assert.strictEqual(api.decisionLabel(rows[3]), "可做空");
 assert.strictEqual(api.decisionLabel(rows[4]), "观望");
 assert.strictEqual(api.monthCutoff("2026-06-22"), "2026-05-23");
+const leadDownPoint = api.relativeStatePoint({ relative_state: "lead", relative_state_duration: 3, relative_state_return: -2.5 });
+assert.strictEqual(leadDownPoint.x, 3);
+assert.strictEqual(leadDownPoint.y, 2.5);
+assert.strictEqual(leadDownPoint.direction, "down");
+assert.strictEqual(leadDownPoint.quadrant, "Leading");
+const improvingUpPoint = api.relativeStatePoint({ relative_state: "improving", relative_state_duration: 4, relative_state_return: 1.25 });
+assert.strictEqual(improvingUpPoint.x, -4);
+assert.strictEqual(improvingUpPoint.y, 1.25);
+assert.strictEqual(improvingUpPoint.direction, "up");
+assert.strictEqual(improvingUpPoint.quadrant, "Improving");
+const lagUpPoint = api.relativeStatePoint({ relative_state: "Lag", relative_state_duration: 5, relative_state_return: 0.8 });
+assert.strictEqual(lagUpPoint.x, -5);
+assert.strictEqual(lagUpPoint.y, -0.8);
+assert.strictEqual(lagUpPoint.direction, "up");
+assert.strictEqual(lagUpPoint.quadrant, "Lagging");
+const weakeningDownPoint = api.relativeStatePoint({ relative_state: "Weakening", relative_state_duration: 6, relative_state_return: -1.7 });
+assert.strictEqual(weakeningDownPoint.x, 6);
+assert.strictEqual(weakeningDownPoint.y, -1.7);
+assert.strictEqual(weakeningDownPoint.direction, "down");
+assert.strictEqual(weakeningDownPoint.quadrant, "Weakening");
+
+context.__plots = [];
+api.renderRelativeCrossSection([
+  { asset_code: "L", asset_name: "Lead", relative_state: "lead", relative_state_duration: 3, relative_state_return: 2.5 },
+  { asset_code: "I", asset_name: "Improve", relative_state: "improving", relative_state_duration: 4, relative_state_return: -1.25 },
+  { asset_code: "G", asset_name: "Lag", relative_state: "lag", relative_state_duration: 5, relative_state_return: 0.8 },
+  { asset_code: "W", asset_name: "Weak", relative_state: "weakening", relative_state_duration: 6, relative_state_return: -1.7 },
+]);
+const relativePlot = context.__plots.at(-1);
+assert.strictEqual(relativePlot[0], "relativeCrossSection");
+assert.strictEqual(JSON.stringify(relativePlot[1].map((trace) => trace.name)), JSON.stringify(["上涨", "下跌"]));
+assert.strictEqual(JSON.stringify(relativePlot[1][0].x), JSON.stringify([3, -5]));
+assert.strictEqual(JSON.stringify(relativePlot[1][0].y), JSON.stringify([2.5, -0.8]));
+assert.strictEqual(JSON.stringify(relativePlot[1][1].x), JSON.stringify([-4, 6]));
+assert.strictEqual(JSON.stringify(relativePlot[1][1].y), JSON.stringify([1.25, -1.7]));
+assert.strictEqual(relativePlot[2].xaxis.title, "当前比价状态持续时间（左右均为正值）");
+assert.strictEqual(relativePlot[2].yaxis.title, "当前比价状态涨跌幅绝对值（上下均为正值）");
+assert.ok(relativePlot[2].shapes.length >= 6);
 
 api.state.date = "2026-06-22";
 api.state.data = {

@@ -15,6 +15,18 @@ const GROUP_COLORS = {
 
 const REQUIRED_FUTURES_GROUPS = ["化工品", "农产品", "有色", "贵金属"];
 const MA_WINDOWS = [5, 10, 20, 60, 250];
+const RELATIVE_STATE_QUADRANTS = {
+  improving: { label: "Improving", xSign: -1, ySign: 1 },
+  lead: { label: "Leading", xSign: 1, ySign: 1 },
+  leading: { label: "Leading", xSign: 1, ySign: 1 },
+  lag: { label: "Lagging", xSign: -1, ySign: -1 },
+  lagging: { label: "Lagging", xSign: -1, ySign: -1 },
+  weakening: { label: "Weakening", xSign: 1, ySign: -1 },
+};
+const RETURN_DIRECTIONS = {
+  up: { name: "上涨", color: "#cf222e" },
+  down: { name: "下跌", color: "#1a7f37" },
+};
 
 const MATRIX_COLUMNS = [
   ["flag", "标注"],
@@ -262,26 +274,43 @@ function renderKlinePanel(selector, rows) {
 }
 
 function renderRelativeCrossSection(rows) {
-  const plotRows = rows.filter((row) => isFinite(number(row.relative_state_duration)) && isFinite(number(row.relative_state_return)));
-  const groups = groupBy(plotRows, (row) => text(row.relative_state) || "未知");
-  const traces = Object.entries(groups).map(([name, items]) => ({
-    name,
+  const points = rows.map((row) => ({ row, point: relativeStatePoint(row) })).filter((item) => item.point);
+  const traces = ["up", "down"].map((direction) => {
+    const directionPoints = points.filter((item) => item.point.direction === direction);
+    const config = RETURN_DIRECTIONS[direction];
+    return {
+    name: config.name,
     type: "scatter",
-    mode: "markers",
-    x: items.map((row) => number(row.relative_state_duration)),
-    y: items.map((row) => number(row.relative_state_return)),
-    text: items.map((row) => `${displayName(row)} ${row.asset_code}`),
-    marker: { size: 8 },
-    hovertemplate: "标的=%{text}<br>持续时间=%{x}<br>涨幅=%{y:.2f}<extra></extra>",
-  }));
+    mode: "markers+text",
+    x: directionPoints.map((item) => item.point.x),
+    y: directionPoints.map((item) => item.point.y),
+    text: directionPoints.map((item) => displayName(item.row)),
+    textposition: "top center",
+    marker: { size: 8, color: config.color, opacity: 0.82, line: { width: 1, color: "#202020" } },
+    customdata: directionPoints.map((item) => [
+      item.row.asset_code,
+      text(item.row.relative_state),
+      item.point.quadrant,
+      item.point.duration,
+      item.point.returnValue,
+      config.name,
+    ]),
+    hovertemplate:
+      "标的=%{text}<br>代码=%{customdata[0]}<br>比价状态=%{customdata[1]}<br>象限=%{customdata[2]}<br>持续时间=%{customdata[3]}<br>涨跌幅=%{customdata[4]:.2f}<br>方向=%{customdata[5]}<extra></extra>",
+  };
+  });
+  const xAxis = mirroredAxis(points.map((item) => Math.abs(item.point.x)), 1);
+  const yAxis = mirroredAxis(points.map((item) => Math.abs(item.point.y)), 1);
   Plotly.newPlot(
     "relativeCrossSection",
     traces,
     {
       height: 460,
       margin: { l: 56, r: 24, t: 20, b: 52 },
-      xaxis: { title: "当前比价状态持续时间" },
-      yaxis: { title: "当前比价状态涨幅" },
+      xaxis: { title: "当前比价状态持续时间（左右均为正值）", ...xAxis },
+      yaxis: { title: "当前比价状态涨跌幅绝对值（上下均为正值）", ...yAxis },
+      shapes: quadrantShapesXY(xAxis.outer, yAxis.outer),
+      annotations: quadrantAnnotations(),
       legend: { orientation: "h" },
     },
     { displayModeBar: false, responsive: true }
@@ -511,17 +540,78 @@ function chartDomId(selector, row, index, suffix) {
   return `${selector.replace(/[^a-zA-Z0-9]/g, "")}-${slug(row.asset_code)}-${index}-${suffix}`;
 }
 
+function relativeStatePoint(row) {
+  const stateConfig = RELATIVE_STATE_QUADRANTS[text(row.relative_state).toLowerCase()];
+  const duration = optionalNumber(row.relative_state_duration);
+  const returnValue = optionalNumber(row.relative_state_return);
+  if (!stateConfig || duration === null || returnValue === null) return null;
+  return {
+    x: stateConfig.xSign * Math.abs(duration),
+    y: stateConfig.ySign * Math.abs(returnValue),
+    direction: returnValue >= 0 ? "up" : "down",
+    quadrant: stateConfig.label,
+    duration: Math.abs(duration),
+    returnValue,
+  };
+}
+
+function mirroredAxis(values, minOuter) {
+  const outer = niceAxisOuter(Math.max(...values, minOuter));
+  const middle = niceAxisTick(outer / 2);
+  return {
+    range: [-outer, outer],
+    tickvals: [-outer, -middle, 0, middle, outer],
+    ticktext: [formatTick(outer), formatTick(middle), "0", formatTick(middle), formatTick(outer)],
+    zeroline: false,
+  };
+}
+
+function niceAxisOuter(value) {
+  if (!Number.isFinite(value) || value <= 0) return 1;
+  return niceAxisTick(value * 1.15);
+}
+
+function niceAxisTick(value) {
+  if (value >= 20) return Math.ceil(value / 5) * 5;
+  if (value >= 5) return Math.ceil(value);
+  if (value >= 1) return Math.ceil(value * 2) / 2;
+  return Math.ceil(value * 10) / 10;
+}
+
+function formatTick(value) {
+  return Number.isInteger(value) ? String(value) : value.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
+}
+
 function quadrantShapes(axis) {
+  return quadrantShapesXY(axis, axis);
+}
+
+function quadrantShapesXY(xAxis, yAxis) {
   return [
-    [0, 0, axis, axis, "rgba(46,160,67,0.08)"],
-    [-axis, 0, 0, axis, "rgba(9,105,218,0.08)"],
-    [-axis, -axis, 0, 0, "rgba(207,34,46,0.07)"],
-    [0, -axis, axis, 0, "rgba(191,135,0,0.08)"],
+    [0, 0, xAxis, yAxis, "rgba(46,160,67,0.08)"],
+    [-xAxis, 0, 0, yAxis, "rgba(9,105,218,0.08)"],
+    [-xAxis, -yAxis, 0, 0, "rgba(207,34,46,0.07)"],
+    [0, -yAxis, xAxis, 0, "rgba(191,135,0,0.08)"],
   ].map(([x0, y0, x1, y1, fillcolor]) => ({ type: "rect", x0, y0, x1, y1, fillcolor, line: { width: 0 }, layer: "below" }))
     .concat([
-      { type: "line", x0: -axis, x1: axis, y0: 0, y1: 0, line: { color: "#9a6700", dash: "dash", width: 1 } },
-      { type: "line", x0: 0, x1: 0, y0: -axis, y1: axis, line: { color: "#9a6700", dash: "dash", width: 1 } },
+      { type: "line", x0: -xAxis, x1: xAxis, y0: 0, y1: 0, line: { color: "#9a6700", dash: "dash", width: 1 } },
+      { type: "line", x0: 0, x1: 0, y0: -yAxis, y1: yAxis, line: { color: "#9a6700", dash: "dash", width: 1 } },
     ]);
+}
+
+function quadrantAnnotations() {
+  return [
+    { text: "Improving", x: 0.06, y: 0.94 },
+    { text: "Leading", x: 0.94, y: 0.94 },
+    { text: "Lagging", x: 0.06, y: 0.06 },
+    { text: "Weakening", x: 0.94, y: 0.06 },
+  ].map((item) => ({
+    ...item,
+    xref: "paper",
+    yref: "paper",
+    showarrow: false,
+    font: { size: 13, color: "#9a6700" },
+  }));
 }
 
 function sumTrendBars(rows, period) {
@@ -631,6 +721,12 @@ function number(value) {
   if (value === null || value === undefined || value === "") return 0;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function optionalNumber(value) {
+  if (value === null || value === undefined || value === "") return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function text(value) {
