@@ -312,8 +312,9 @@ function renderRelativeCrossSection(rows) {
       shapes: quadrantShapesXY(xAxis.outer, yAxis.outer),
       annotations: quadrantAnnotations(),
       legend: { orientation: "h" },
+      dragmode: "pan",
     },
-    { displayModeBar: false, responsive: true }
+    { displayModeBar: true, displaylogo: false, responsive: true, scrollZoom: true }
   );
 }
 

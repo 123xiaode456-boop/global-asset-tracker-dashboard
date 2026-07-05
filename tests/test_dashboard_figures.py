@@ -1,5 +1,6 @@
 from asset_tracker.analysis import QuadrantPoint
 from asset_tracker.dashboard import (
+    MARKET_QUADRANT_PLOTLY_CONFIG,
     _asset_labels,
     _asset_table_frame,
     _filter_asset_frame,
@@ -119,6 +120,9 @@ def test_market_quadrant_figure_places_assets_by_relative_state_and_colors_by_re
     assert "Leading" in [annotation.text for annotation in figure.layout.annotations]
     assert figure.layout.xaxis.title.text == "当前比价状态持续时间（左右均为正值）"
     assert figure.layout.yaxis.title.text == "当前比价状态涨跌幅绝对值（上下均为正值）"
+    assert figure.layout.dragmode == "pan"
+    assert MARKET_QUADRANT_PLOTLY_CONFIG["scrollZoom"] is True
+    assert MARKET_QUADRANT_PLOTLY_CONFIG["displayModeBar"] is True
 
 
 def test_asset_labels_prefer_chinese_name_and_keep_original_name():

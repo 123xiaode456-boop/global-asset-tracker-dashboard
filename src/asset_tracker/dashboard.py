@@ -30,6 +30,7 @@ RETURN_DIRECTIONS = {
     "up": {"name": "上涨", "color": "#cf222e"},
     "down": {"name": "下跌", "color": "#1a7f37"},
 }
+MARKET_QUADRANT_PLOTLY_CONFIG = {"scrollZoom": True, "displayModeBar": True, "displaylogo": False}
 
 
 def run_app(default_db: str | Path = DEFAULT_DB) -> None:
@@ -103,6 +104,7 @@ def run_app(default_db: str | Path = DEFAULT_DB) -> None:
                 _market_quadrant_figure(quadrant_rows, show_labels=show_labels),
                 width="stretch",
                 key="market-quadrant-map",
+                config=MARKET_QUADRANT_PLOTLY_CONFIG,
             )
             st.dataframe(
                 _market_quadrant_table(quadrant_rows),
@@ -441,6 +443,7 @@ def _market_quadrant_figure(rows: list[dict[str, Any]], show_labels: bool = Fals
         xaxis_title="当前比价状态持续时间（左右均为正值）",
         yaxis_title="当前比价状态涨跌幅绝对值（上下均为正值）",
         legend=dict(orientation="h"),
+        dragmode="pan",
     )
     fig.update_xaxes(
         range=[-x_axis["outer"], x_axis["outer"]],

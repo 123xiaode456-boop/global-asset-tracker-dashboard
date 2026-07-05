@@ -140,6 +140,9 @@ assert.strictEqual(JSON.stringify(relativePlot[1][1].x), JSON.stringify([-4, 6])
 assert.strictEqual(JSON.stringify(relativePlot[1][1].y), JSON.stringify([1.25, -1.7]));
 assert.strictEqual(relativePlot[2].xaxis.title, "当前比价状态持续时间（左右均为正值）");
 assert.strictEqual(relativePlot[2].yaxis.title, "当前比价状态涨跌幅绝对值（上下均为正值）");
+assert.strictEqual(relativePlot[2].dragmode, "pan");
+assert.strictEqual(relativePlot[3].scrollZoom, true);
+assert.strictEqual(relativePlot[3].displayModeBar, true);
 assert.ok(relativePlot[2].shapes.length >= 6);
 
 api.state.date = "2026-06-22";
