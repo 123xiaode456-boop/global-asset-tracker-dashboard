@@ -18,6 +18,7 @@ source = source.replace(/\nmain\(\)\.catch\([\s\S]*?\);\s*$/, "\n");
 
 const context = {
   console,
+  location: { hostname: "123xiaode456-boop.github.io" },
   __plots: [],
   __elements: {},
   __body: { dataset: {}, classList: { toggle: () => {} } },
@@ -47,6 +48,7 @@ vm.runInContext(
 globalThis.__api = {
   state,
   currentCommodityRows,
+  render,
   barAlertRows,
   barOneReasons,
   filterLong,
@@ -73,11 +75,13 @@ globalThis.__api = {
   toWeeklyBars,
   SEARCH_COLUMNS,
   MA_WINDOWS,
+  DATA_URL,
 };`,
   context
 );
 
 const api = context.__api;
+assert.strictEqual(api.DATA_URL, "https://raw.githubusercontent.com/123xiaode456-boop/global-asset-tracker-dashboard/main/site-v2/data/app-data.json");
 const up = "上行趋势";
 const down = "下行趋势";
 const base = {
@@ -152,9 +156,10 @@ assert.strictEqual(relativePlot[2].yaxis.title, "当前比价状态涨跌幅绝�
 assert.strictEqual(relativePlot[2].dragmode, "pan");
 assert.strictEqual(relativePlot[3].scrollZoom, true);
 assert.strictEqual(relativePlot[3].displayModeBar, true);
+assert.ok(relativePlot[2].height >= 680);
 assert.ok(relativePlot[2].shapes.length >= 6);
 const axisLines = relativePlot[2].shapes.filter((shape) => shape.type === "line");
-assert.ok(axisLines.every((shape) => shape.line.width >= 3));
+assert.ok(axisLines.every((shape) => shape.line.width >= 5));
 api.selectView("early");
 assert.strictEqual(api.selectedView(), "early");
 assert.strictEqual(context.document.body.dataset.activeView, "early");
@@ -197,10 +202,14 @@ api.state.data = {
       ],
     },
     "core|2026-07-03": {
+      latestDate: "2026-07-03",
       latestRows: [
-        { asset_key: "CHEM1|Chem One", asset_code: "CHEM1", day_trend: up, day_trend_duration: 3, week_trend: up, week_trend_duration: 4, month_trend: up, month_trend_duration: 5 },
+        { asset_key: "CHEM1|Chem One", asset_code: "CHEM1", asset_name: "Chem One", relative_state: "lead", capital_state: "加杠杆", day_trend: up, day_trend_duration: 3, week_trend: up, week_trend_duration: 4, month_trend: up, month_trend_duration: 5 },
         { asset_key: "CHEM2|Chem Two", asset_code: "CHEM2", day_trend: down, day_trend_duration: 6, week_trend: down, week_trend_duration: 7, month_trend: down, month_trend_duration: 8 },
         { asset_key: "GOLD1|Gold", asset_code: "GOLD1", day_trend: up, day_trend_duration: 9, week_trend: up, week_trend_duration: 10, month_trend: up, month_trend_duration: 11 },
+        { asset_key: "UNMAPPED_LONG|Long", asset_code: "UNMAPPED_LONG", asset_name: "Unmapped Long", relative_state: "improving", capital_state: "加杠杆", day_trend: up, day_trend_duration: 2, week_trend: up, week_trend_duration: 3, month_trend: down, month_trend_duration: 4 },
+        { asset_key: "UNMAPPED_SHORT|Short", asset_code: "UNMAPPED_SHORT", asset_name: "Unmapped Short", relative_state: "lag", capital_state: "去杠杆", day_trend: down, day_trend_duration: 2, week_trend: down, week_trend_duration: 3, month_trend: up, month_trend_duration: 4 },
+        { asset_key: "NO_SIGNAL|No", asset_code: "NO_SIGNAL", asset_name: "No Signal", relative_state: "lead", capital_state: "去杠杆", day_trend: up, day_trend_duration: 2, week_trend: up, week_trend_duration: 3, month_trend: up, month_trend_duration: 4 },
       ],
     },
   },
@@ -242,6 +251,14 @@ assert.strictEqual(JSON.stringify(api.currentCommodityRows([
   { ...rows[2], asset_code: "C", asset_key: "C|Wrong" },
 ]).map((row) => row.asset_key)), JSON.stringify(["A|Alpha", "C|Alpha"]));
 api.state.date = "2026-07-03";
+api.state.search = "";
+context.__plots = [];
+api.render();
+assert.ok(context.__elements["#longMatrix"].innerHTML.includes(">CHEM1<"));
+assert.ok(context.__elements["#longMatrix"].innerHTML.includes(">UNMAPPED_LONG<"));
+assert.ok(context.__elements["#shortMatrix"].innerHTML.includes(">UNMAPPED_SHORT<"));
+assert.ok(!context.__elements["#longMatrix"].innerHTML.includes(">NO_SIGNAL<"));
+assert.ok(!context.__elements["#shortMatrix"].innerHTML.includes(">NO_SIGNAL<"));
 context.__plots = [];
 api.renderMonthlyTrajectories();
 assert.strictEqual(api.selectedQuadrantGroup(), "化工品");

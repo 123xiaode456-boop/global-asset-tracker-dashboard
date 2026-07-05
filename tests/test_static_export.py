@@ -56,7 +56,7 @@ def test_static_export_includes_price_history_by_asset_key(tmp_path):
     assert payload["priceCoverage"]["AAA|Alpha ETF"]["hasPrice"] is True
 
 
-def test_static_export_can_build_commodity_only_payload(tmp_path):
+def test_static_export_can_build_core_payload_with_full_signal_rows_and_commodity_price_scope(tmp_path):
     db = AssetDatabase(tmp_path / "signals.sqlite")
     db.initialize()
     parsed = ParsedDataset(
@@ -80,7 +80,7 @@ def test_static_export_can_build_commodity_only_payload(tmp_path):
 
     assert payload["datasetTypes"] == ["core"]
     assert set(payload["datesByType"]) == {"core"}
-    assert [row["asset_code"] for row in snapshot["latestRows"]] == ["GC1!"]
+    assert [row["asset_code"] for row in snapshot["latestRows"]] == ["GC1!", "SPY"]
     assert "SPY|SPDR S&P 500 ETF Trust" not in payload["priceHistories"]
 
 

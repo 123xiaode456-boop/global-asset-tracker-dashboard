@@ -1,3 +1,7 @@
+const RAW_DATA_URL =
+  "https://raw.githubusercontent.com/123xiaode456-boop/global-asset-tracker-dashboard/main/site-v2/data/app-data.json";
+const DATA_URL = globalThis.location?.hostname?.endsWith("github.io") ? RAW_DATA_URL : "./data/app-data.json";
+
 const state = {
   data: null,
   datasetKey: "core",
@@ -68,7 +72,7 @@ const SEARCH_COLUMNS = [
 ];
 
 async function main() {
-  const response = await fetch("./data/app-data.json", { cache: "no-store" });
+  const response = await fetch(DATA_URL, { cache: "no-store" });
   state.data = await response.json();
   initControls();
   render();
@@ -123,9 +127,10 @@ function render() {
   document.querySelector("#generatedAt").textContent = `数据生成：${state.data.generatedAt}；当前日期：${state.date || "-"}`;
   if (!snapshot) return;
 
-  const rows = currentCommodityRows(snapshot.latestRows || []);
-  const longRows = filterLong(rows);
-  const shortRows = filterShort(rows);
+  const allRows = snapshot.latestRows || [];
+  const rows = currentCommodityRows(allRows);
+  const longRows = filterLong(allRows);
+  const shortRows = filterShort(allRows);
 
   renderMetrics(snapshot, longRows, shortRows);
   renderBarAlerts(rows);
@@ -311,8 +316,8 @@ function renderRelativeCrossSection(rows) {
     "relativeCrossSection",
     traces,
     {
-      height: 460,
-      margin: { l: 56, r: 24, t: 20, b: 52 },
+      height: 720,
+      margin: { l: 70, r: 28, t: 24, b: 64 },
       xaxis: { title: "当前比价状态持续时间（左右均为正值）", ...xAxis },
       yaxis: { title: "当前比价状态涨跌幅绝对值（上下均为正值）", ...yAxis },
       shapes: quadrantShapesXY(xAxis.outer, yAxis.outer),
@@ -624,8 +629,8 @@ function quadrantShapesXY(xAxis, yAxis) {
     [0, -yAxis, xAxis, 0, "rgba(191,135,0,0.08)"],
   ].map(([x0, y0, x1, y1, fillcolor]) => ({ type: "rect", x0, y0, x1, y1, fillcolor, line: { width: 0 }, layer: "below" }))
     .concat([
-      { type: "line", x0: -xAxis, x1: xAxis, y0: 0, y1: 0, line: { color: "#9a6700", dash: "dash", width: 3 } },
-      { type: "line", x0: 0, x1: 0, y0: -yAxis, y1: yAxis, line: { color: "#9a6700", dash: "dash", width: 3 } },
+      { type: "line", x0: -xAxis, x1: xAxis, y0: 0, y1: 0, line: { color: "#f2c94c", dash: "dash", width: 6 } },
+      { type: "line", x0: 0, x1: 0, y0: -yAxis, y1: yAxis, line: { color: "#f2c94c", dash: "dash", width: 6 } },
     ]);
 }
 

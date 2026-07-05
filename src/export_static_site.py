@@ -105,17 +105,6 @@ def _filter_payload_to_commodities(payload: dict[str, Any], rows_for_prices: dic
         allowed_keys.update(str(item.get("assetKey") or "") for item in items)
     allowed_keys.discard("")
 
-    snapshots = payload.get("snapshots", {})
-    for key, snapshot in list(snapshots.items()):
-        rows = [row for row in snapshot.get("latestRows", []) if str(row.get("asset_key") or "") in allowed_keys]
-        snapshot["latestRows"] = rows
-        snapshot["latestCounts"] = dict(snapshot.get("latestCounts") or {})
-        snapshot["latestCounts"]["total"] = len(rows)
-        for list_key in ("focusWatch", "riskWatch", "longOpportunities", "shortOpportunities"):
-            snapshot[list_key] = [
-                row for row in snapshot.get(list_key, []) if str(row.get("asset_key") or "") in allowed_keys
-            ]
-
     for asset_key in list(rows_for_prices):
         if asset_key not in allowed_keys:
             rows_for_prices.pop(asset_key, None)
