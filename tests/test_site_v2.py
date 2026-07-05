@@ -20,21 +20,25 @@ const context = {
   console,
   __plots: [],
   __elements: {},
+  __body: { dataset: {}, classList: { toggle: () => {} } },
   Plotly: {
     newPlot: (...args) => {
       context.__plots.push(args);
     },
   },
   document: {
+    body: null,
     querySelector: (selector) => {
       if (!context.__elements[selector]) {
-        context.__elements[selector] = { innerHTML: "" };
+        context.__elements[selector] = { innerHTML: "", dataset: {}, classList: { toggle: () => {} } };
       }
       return context.__elements[selector];
     },
+    querySelectorAll: () => [],
   },
   requestAnimationFrame: (fn) => fn(),
 };
+context.document.body = context.__body;
 context.globalThis = context;
 vm.createContext(context);
 vm.runInContext(
@@ -56,9 +60,14 @@ globalThis.__api = {
   coreDatesInLast30Days,
   renderRelativeCrossSection,
   relativeStatePoint,
+  selectedView,
+  selectView,
   selectedQuadrantGroup,
   selectQuadrantGroup,
   renderMonthlyTrajectories,
+  selectedTrendGroup,
+  selectTrendGroup,
+  renderTrendBars,
   drawKline,
   priceHistory,
   toWeeklyBars,
@@ -144,11 +153,53 @@ assert.strictEqual(relativePlot[2].dragmode, "pan");
 assert.strictEqual(relativePlot[3].scrollZoom, true);
 assert.strictEqual(relativePlot[3].displayModeBar, true);
 assert.ok(relativePlot[2].shapes.length >= 6);
+const axisLines = relativePlot[2].shapes.filter((shape) => shape.type === "line");
+assert.ok(axisLines.every((shape) => shape.line.width >= 3));
+api.selectView("early");
+assert.strictEqual(api.selectedView(), "early");
+assert.strictEqual(context.document.body.dataset.activeView, "early");
 
 api.state.date = "2026-06-22";
 api.state.data = {
   datesByType: {
-    core: ["2026-05-20", "2026-05-23", "2026-06-01", "2026-06-22", "2026-07-03"],
+    core: ["2026-05-20", "2026-05-23", "2026-06-01", "2026-06-10", "2026-06-22", "2026-07-03"],
+  },
+  snapshots: {
+    "core|2026-05-23": {
+      latestRows: [
+        { asset_key: "CHEM1|Chem One", asset_code: "CHEM1", day_trend: up, day_trend_duration: 1, week_trend: up, week_trend_duration: 2, month_trend: down, month_trend_duration: 3 },
+        { asset_key: "CHEM2|Chem Two", asset_code: "CHEM2", day_trend: down, day_trend_duration: 4, week_trend: up, week_trend_duration: 5, month_trend: up, month_trend_duration: 6 },
+        { asset_key: "GOLD1|Gold", asset_code: "GOLD1", day_trend: up, day_trend_duration: 7, week_trend: down, week_trend_duration: 8, month_trend: up, month_trend_duration: 9 },
+      ],
+    },
+    "core|2026-06-01": {
+      latestRows: [
+        { asset_key: "CHEM1|Chem One", asset_code: "CHEM1", day_trend: down, day_trend_duration: 2, week_trend: down, week_trend_duration: 3, month_trend: up, month_trend_duration: 4 },
+        { asset_key: "CHEM2|Chem Two", asset_code: "CHEM2", day_trend: up, day_trend_duration: 5, week_trend: up, week_trend_duration: 6, month_trend: down, month_trend_duration: 7 },
+        { asset_key: "GOLD1|Gold", asset_code: "GOLD1", day_trend: down, day_trend_duration: 8, week_trend: up, week_trend_duration: 9, month_trend: down, month_trend_duration: 10 },
+      ],
+    },
+    "core|2026-06-10": {
+      latestRows: [
+        { asset_key: "CHEM1|Chem One", asset_code: "CHEM1", day_trend: up, day_trend_duration: 1, week_trend: up, week_trend_duration: 2, month_trend: down, month_trend_duration: 3 },
+        { asset_key: "CHEM2|Chem Two", asset_code: "CHEM2", day_trend: down, day_trend_duration: 4, week_trend: up, week_trend_duration: 5, month_trend: up, month_trend_duration: 6 },
+        { asset_key: "GOLD1|Gold", asset_code: "GOLD1", day_trend: up, day_trend_duration: 7, week_trend: down, week_trend_duration: 8, month_trend: up, month_trend_duration: 9 },
+      ],
+    },
+    "core|2026-06-22": {
+      latestRows: [
+        { asset_key: "CHEM1|Chem One", asset_code: "CHEM1", day_trend: down, day_trend_duration: 2, week_trend: down, week_trend_duration: 3, month_trend: up, month_trend_duration: 4 },
+        { asset_key: "CHEM2|Chem Two", asset_code: "CHEM2", day_trend: up, day_trend_duration: 5, week_trend: up, week_trend_duration: 6, month_trend: down, month_trend_duration: 7 },
+        { asset_key: "GOLD1|Gold", asset_code: "GOLD1", day_trend: down, day_trend_duration: 8, week_trend: up, week_trend_duration: 9, month_trend: down, month_trend_duration: 10 },
+      ],
+    },
+    "core|2026-07-03": {
+      latestRows: [
+        { asset_key: "CHEM1|Chem One", asset_code: "CHEM1", day_trend: up, day_trend_duration: 3, week_trend: up, week_trend_duration: 4, month_trend: up, month_trend_duration: 5 },
+        { asset_key: "CHEM2|Chem Two", asset_code: "CHEM2", day_trend: down, day_trend_duration: 6, week_trend: down, week_trend_duration: 7, month_trend: down, month_trend_duration: 8 },
+        { asset_key: "GOLD1|Gold", asset_code: "GOLD1", day_trend: up, day_trend_duration: 9, week_trend: up, week_trend_duration: 10, month_trend: up, month_trend_duration: 11 },
+      ],
+    },
   },
   futuresByDate: {
     "2026-06-22": [
@@ -181,7 +232,7 @@ api.state.data = {
   },
 };
 assert.strictEqual(api.selectedCoreDate(), "2026-06-22");
-assert.strictEqual(JSON.stringify(api.coreDatesInLast30Days("2026-06-22")), JSON.stringify(["2026-05-23", "2026-06-01", "2026-06-22"]));
+assert.strictEqual(JSON.stringify(api.coreDatesInLast30Days("2026-06-22")), JSON.stringify(["2026-05-23", "2026-06-01", "2026-06-10", "2026-06-22"]));
 assert.strictEqual(JSON.stringify(api.currentCommodityRows([
   { ...rows[1], asset_key: "A|Alpha" },
   { ...rows[2], asset_key: "C|Alpha" },
@@ -202,6 +253,22 @@ api.selectQuadrantGroup("贵金属");
 assert.strictEqual(api.selectedQuadrantGroup(), "贵金属");
 assert.ok(context.__elements["#monthlyTrajectories"].innerHTML.includes("黄金"));
 assert.ok(!context.__elements["#monthlyTrajectories"].innerHTML.includes("化工一号"));
+context.__plots = [];
+api.selectTrendGroup("化工品");
+assert.strictEqual(api.selectedTrendGroup(), "化工品");
+assert.ok(context.__elements["#trendBars"].innerHTML.includes("trend-tabs"));
+assert.ok(context.__elements["#trendBars"].innerHTML.includes("trend-grid"));
+assert.ok(context.__elements["#trendBars"].innerHTML.includes("化工一号"));
+assert.ok(context.__elements["#trendBars"].innerHTML.includes("化工二号"));
+assert.ok(!context.__elements["#trendBars"].innerHTML.includes("黄金"));
+assert.strictEqual(context.__plots.length, 2);
+assert.strictEqual(JSON.stringify(context.__plots.map((plot) => plot[0])), JSON.stringify(["trend-化工品-0", "trend-化工品-1"]));
+assert.strictEqual(JSON.stringify(context.__plots[0][1].map((trace) => trace.name)), JSON.stringify(["日K", "周K", "月K"]));
+assert.strictEqual(JSON.stringify(context.__plots[0][1][0].y), JSON.stringify([1, -2, 3]));
+api.selectTrendGroup("贵金属");
+assert.strictEqual(api.selectedTrendGroup(), "贵金属");
+assert.ok(context.__elements["#trendBars"].innerHTML.includes("黄金"));
+assert.ok(!context.__elements["#trendBars"].innerHTML.includes("化工一号"));
 assert.strictEqual(JSON.stringify(api.barAlertRows(rows).map((row) => row.asset_code)), JSON.stringify(["A", "B"]));
 assert.strictEqual(JSON.stringify(api.barOneReasons({ ...base, relative_state_duration: 1, day_trend_duration: 1, capital_state_duration: 1 })), JSON.stringify(["比价=1", "日K=1", "资金=1"]));
 assert.strictEqual(JSON.stringify(api.SEARCH_COLUMNS.map((item) => item[0])), JSON.stringify([
@@ -252,6 +319,9 @@ def test_site_v2_styles_support_kline_and_missing_panels():
     css = (PROJECT_ROOT / "site-v2" / "styles.css").read_text(encoding="utf-8")
 
     for selector in [
+        ".module-nav",
+        ".module-button",
+        "body[data-active-view",
         ".kline-summary",
         ".missing",
         ".kline-grid",
@@ -261,8 +331,23 @@ def test_site_v2_styles_support_kline_and_missing_panels():
         ".quadrant-grid",
         ".quadrant-card",
         ".quadrant-chart",
+        ".trend-grid",
+        ".trend-card",
+        ".trend-chart",
     ]:
         assert selector in css
+
+    assert "#0b1018" in css
+    assert "#00d4ff" in css
+
+
+def test_site_v2_index_uses_module_navigation():
+    html = (PROJECT_ROOT / "site-v2" / "index.html").read_text(encoding="utf-8")
+
+    assert 'class="module-nav"' in html
+    for view in ["overview", "long", "short", "early", "trend", "search"]:
+        assert f'data-view-target="{view}"' in html
+        assert f'data-view="{view}"' in html
 
 
 def test_publish_script_includes_original_root_and_v2_subdirectory():

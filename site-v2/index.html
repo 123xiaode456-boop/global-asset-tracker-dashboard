@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="./styles.css" />
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   </head>
-  <body>
+  <body data-active-view="overview">
     <header class="topbar">
       <div>
         <h1>商品数据面板 v2</h1>
@@ -29,17 +29,26 @@
       </div>
     </header>
 
+    <nav class="module-nav" aria-label="页面模块">
+      <button class="module-button active" type="button" data-view-target="overview" onclick="selectView('overview')">总览</button>
+      <button class="module-button" type="button" data-view-target="long" onclick="selectView('long')">做多筛选</button>
+      <button class="module-button" type="button" data-view-target="short" onclick="selectView('short')">做空筛选</button>
+      <button class="module-button" type="button" data-view-target="early" onclick="selectView('early')">早期转折</button>
+      <button class="module-button" type="button" data-view-target="trend" onclick="selectView('trend')">三级别趋势</button>
+      <button class="module-button" type="button" data-view-target="search" onclick="selectView('search')">搜索</button>
+    </nav>
+
     <main>
-      <section class="notice">
+      <section class="notice" data-view="overview">
         <strong>v2 说明</strong>
         <span>当前版本只看商品核心数据集。顶部先列出三类持续时间等于 1 的商品标的；搜索面板只展示数据总表里的关键字段。</span>
       </section>
 
-      <section class="metrics" id="metrics"></section>
+      <section class="metrics" id="metrics" data-view="overview"></section>
 
-      <section id="barAlerts"></section>
+      <section id="barAlerts" data-view="overview"></section>
 
-      <section>
+      <section data-view="long">
         <h2>一、做多标的筛选</h2>
         <p class="requirement">（比价improving/lead+资金加杠杆+周k上行+日k上行）</p>
         <p class="chart-request">【筛选出标的矩阵表格 含持续bar等 小到大排列 并特别标注bar为1的标的】</p>
@@ -50,7 +59,7 @@
         <div id="longKlinePanel"></div>
       </section>
 
-      <section>
+      <section data-view="short">
         <h2>二、做空标的筛选</h2>
         <p class="requirement">（比价weakening/lag+资金去杠杆+周k下行+日k下行）</p>
         <p class="chart-request">【筛选出标的矩阵表格 含持续bar等 小到大排列 并特别标注bar为1的标的】</p>
@@ -61,7 +70,7 @@
         <div id="shortKlinePanel"></div>
       </section>
 
-      <section>
+      <section data-view="early">
         <h2>三、早期转折</h2>
         <p class="chart-request">【四象限当前比价状态横截面 按当前比价状态确定象限】</p>
         <p class="rule">横轴为当前比价状态持续时间，左右两侧刻度均显示正数；纵轴为当前比价状态涨跌幅绝对值，上下两侧刻度均显示正数；红点代表上涨，绿点代表下跌。</p>
@@ -71,7 +80,7 @@
         <div id="monthlyTrajectories"></div>
       </section>
 
-      <section>
+      <section data-view="trend">
         <h2>四、三级别趋势</h2>
         <p class="rule">以下为网页备注：</p>
         <ol class="stage-list">
@@ -81,12 +90,12 @@
           <li>主升浪或升浪背景下的日级别调整，日转平</li>
           <li>上行趋势逢低布局时间窗口，周上月上，日上转下或日下转上</li>
         </ol>
-        <p class="chart-request">【日周月趋势柱形图 横轴为一个月日期 纵轴为bar数/正为上行趋势/负为下行趋势/零为无趋势 化工/农/有色 】</p>
-        <p class="rule">纵轴使用各自趋势持续 bar；上行趋势取正，下行趋势取负，无趋势取 0；包含化工品、农产品、有色、贵金属。</p>
+        <p class="chart-request">【日周月趋势柱形图 按板块分页 每个品种单独一张图】</p>
+        <p class="rule">选择化工品、农产品、有色、贵金属任一板块后，逐个品种展示近一个月日/周/月趋势持续 bar；上行趋势取正，下行趋势取负，无趋势取 0。</p>
         <div id="trendBars"></div>
       </section>
 
-      <section>
+      <section data-view="search">
         <h2>五、搜索</h2>
         <p class="chart-request">【输入关键字 显示所有相关标的的面板数据 并给出判断多空】</p>
         <p class="rule">面板展示商品数据总表中相关标的的单独行：当前比价状态持续时间、当前比价状态、当前比价状态涨幅、日/周/月趋势及持续时间、当前杠杆资金状态持续时间、当前杠杆资金状态，并给出多空/观望。</p>

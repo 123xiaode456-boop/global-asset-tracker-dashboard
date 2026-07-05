@@ -2,7 +2,9 @@ const state = {
   data: null,
   datasetKey: "core",
   date: "",
+  activeView: "overview",
   quadrantGroup: "化工品",
+  trendGroup: "化工品",
   search: "",
 };
 
@@ -14,6 +16,7 @@ const GROUP_COLORS = {
 };
 
 const REQUIRED_FUTURES_GROUPS = ["化工品", "农产品", "有色", "贵金属"];
+const VIEW_KEYS = ["overview", "long", "short", "early", "trend", "search"];
 const MA_WINDOWS = [5, 10, 20, 60, 250];
 const RELATIVE_STATE_QUADRANTS = {
   improving: { label: "Improving", xSign: -1, ySign: 1 },
@@ -69,6 +72,7 @@ async function main() {
   state.data = await response.json();
   initControls();
   render();
+  selectView(state.activeView);
 }
 
 function initControls() {
@@ -81,6 +85,7 @@ function initControls() {
     state.date = dates.at(-1) || "";
     syncDateSelect();
     render();
+    selectView(state.activeView);
   });
 
   const dates = datesForCurrentDataset();
@@ -101,6 +106,7 @@ function syncDateSelect() {
   dateSelect.onchange = () => {
     state.date = dateSelect.value;
     render();
+    selectView(state.activeView);
   };
 }
 
@@ -363,34 +369,57 @@ function renderTrendBars() {
   const date = selectedCoreDate();
   const dates = coreDatesInLast30Days(date);
   const latestFutures = state.data.futuresByDate[date] || [];
-  const byKey = new Map(latestFutures.map((item) => [item.assetKey, item.group]));
-  const byCode = new Map(latestFutures.map((item) => [item.assetCode, item.group]));
-  document.querySelector("#trendBars").innerHTML = REQUIRED_FUTURES_GROUPS
-    .map((group) => `<h3 class="group-title">${group}</h3><div class="wide-chart" id="trend-${slug(group)}"></div>`)
-    .join("");
+  const group = selectedTrendGroup();
+  const items = latestFutures.filter((item) => item.group === group);
 
-  for (const group of REQUIRED_FUTURES_GROUPS) {
+  document.querySelector("#trendBars").innerHTML = `
+    <div class="quadrant-tabs trend-tabs">
+      ${REQUIRED_FUTURES_GROUPS.map(
+        (name) =>
+          `<button class="quadrant-tab ${name === group ? "active" : ""}" type="button" onclick="selectTrendGroup('${escapeHtml(name)}')">${escapeHtml(name)}</button>`
+      ).join("")}
+    </div>
+    <div class="kline-summary">${escapeHtml(group)}：${items.length} 个品种；每个品种单独一张日/周/月趋势 bar 图，横轴为当前日期往前 30 自然日内已有数据。</div>
+    ${
+      items.length
+        ? `<div class="trend-grid">
+            ${items
+              .map(
+                (item, index) => `
+                  <article class="trend-card">
+                    <h3>${escapeHtml(futuresDisplayName(item))} <code>${escapeHtml(item.assetCode)}</code></h3>
+                    <div class="trend-chart" id="trend-${slug(group)}-${index}"></div>
+                  </article>`
+              )
+              .join("")}
+          </div>`
+        : `<div class="empty">当前日期下没有 ${escapeHtml(group)} 的三级别趋势数据。</div>`
+    }
+  `;
+
+  items.forEach((item, index) => {
     const traces = ["day", "week", "month"].map((period) => {
       const values = dates.map((date) => {
         const snapshot = state.data.snapshots[`core|${date}`];
-        const rows = (snapshot?.latestRows || []).filter((row) => (byKey.get(row.asset_key) || byCode.get(row.asset_code)) === group);
-        return sumTrendBars(rows, period);
+        const row = (snapshot?.latestRows || []).find((candidate) => rowMatchesFuturesItem(candidate, item));
+        return trendBarValue(row, period);
       });
       return { type: "bar", name: periodLabel(period), x: dates, y: values };
     });
     Plotly.newPlot(
-      `trend-${slug(group)}`,
+      `trend-${slug(group)}-${index}`,
       traces,
       {
         barmode: "group",
-        height: 360,
+        height: 320,
         margin: { l: 56, r: 24, t: 20, b: 52 },
-        xaxis: { title: "一个月日期" },
+        xaxis: { title: "一个月日期", tickangle: -30 },
         yaxis: { title: "bar数：上行正 / 下行负 / 无趋势0" },
+        legend: { orientation: "h", y: -0.22 },
       },
       { displayModeBar: false, responsive: true }
     );
-  }
+  });
 }
 
 function renderSearch() {
@@ -595,8 +624,8 @@ function quadrantShapesXY(xAxis, yAxis) {
     [0, -yAxis, xAxis, 0, "rgba(191,135,0,0.08)"],
   ].map(([x0, y0, x1, y1, fillcolor]) => ({ type: "rect", x0, y0, x1, y1, fillcolor, line: { width: 0 }, layer: "below" }))
     .concat([
-      { type: "line", x0: -xAxis, x1: xAxis, y0: 0, y1: 0, line: { color: "#9a6700", dash: "dash", width: 1 } },
-      { type: "line", x0: 0, x1: 0, y0: -yAxis, y1: yAxis, line: { color: "#9a6700", dash: "dash", width: 1 } },
+      { type: "line", x0: -xAxis, x1: xAxis, y0: 0, y1: 0, line: { color: "#9a6700", dash: "dash", width: 3 } },
+      { type: "line", x0: 0, x1: 0, y0: -yAxis, y1: yAxis, line: { color: "#9a6700", dash: "dash", width: 3 } },
     ]);
 }
 
@@ -625,12 +654,34 @@ function sumTrendBars(rows, period) {
   }, 0);
 }
 
+function trendBarValue(row, period) {
+  if (!row) return null;
+  const trend = row[`${period}_trend`];
+  const duration = number(row[`${period}_trend_duration`]);
+  if (isUp(trend)) return duration;
+  if (isDown(trend)) return -duration;
+  return 0;
+}
+
 function periodLabel(period) {
   return { day: "日K", week: "周K", month: "月K" }[period] || period;
 }
 
 function selectedCoreDate() {
   return state.date || (state.data?.datesByType?.core || []).at(-1) || "";
+}
+
+function selectedView() {
+  return VIEW_KEYS.includes(state.activeView) ? state.activeView : "overview";
+}
+
+function selectView(view) {
+  if (!VIEW_KEYS.includes(view)) return;
+  state.activeView = view;
+  if (document.body) document.body.dataset.activeView = view;
+  document.querySelectorAll("[data-view-target]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.viewTarget === view);
+  });
 }
 
 function selectedQuadrantGroup() {
@@ -641,6 +692,24 @@ function selectQuadrantGroup(group) {
   if (!REQUIRED_FUTURES_GROUPS.includes(group)) return;
   state.quadrantGroup = group;
   renderMonthlyTrajectories();
+}
+
+function selectedTrendGroup() {
+  return REQUIRED_FUTURES_GROUPS.includes(state.trendGroup) ? state.trendGroup : REQUIRED_FUTURES_GROUPS[0];
+}
+
+function selectTrendGroup(group) {
+  if (!REQUIRED_FUTURES_GROUPS.includes(group)) return;
+  state.trendGroup = group;
+  renderTrendBars();
+}
+
+function rowMatchesFuturesItem(row, item) {
+  return text(row.asset_key) === text(item.assetKey) || text(row.asset_code) === text(item.assetCode);
+}
+
+function futuresDisplayName(item) {
+  return text(item.displayName) || text(item.assetName) || text(item.assetCode);
 }
 
 function coreDatesInLast30Days(dateText) {
