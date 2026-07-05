@@ -16,7 +16,7 @@ const GROUP_COLORS = {
 };
 
 const REQUIRED_FUTURES_GROUPS = ["化工品", "农产品", "有色", "贵金属"];
-const VIEW_KEYS = ["overview", "long", "short", "early", "trend", "search"];
+const VIEW_KEYS = ["overview", "long", "short", "early", "trajectory", "trend", "search"];
 const MA_WINDOWS = [5, 10, 20, 60, 250];
 const RELATIVE_STATE_QUADRANTS = {
   improving: { label: "Improving", xSign: -1, ySign: 1 },

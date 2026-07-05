@@ -153,6 +153,7 @@ body[data-active-view="overview"] [data-view]:not([data-view="overview"]),
 body[data-active-view="long"] [data-view]:not([data-view="long"]),
 body[data-active-view="short"] [data-view]:not([data-view="short"]),
 body[data-active-view="early"] [data-view]:not([data-view="early"]),
+body[data-active-view="trajectory"] [data-view]:not([data-view="trajectory"]),
 body[data-active-view="trend"] [data-view]:not([data-view="trend"]),
 body[data-active-view="search"] [data-view]:not([data-view="search"]) {
   display: none;

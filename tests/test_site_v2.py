@@ -158,6 +158,9 @@ assert.ok(axisLines.every((shape) => shape.line.width >= 3));
 api.selectView("early");
 assert.strictEqual(api.selectedView(), "early");
 assert.strictEqual(context.document.body.dataset.activeView, "early");
+api.selectView("trajectory");
+assert.strictEqual(api.selectedView(), "trajectory");
+assert.strictEqual(context.document.body.dataset.activeView, "trajectory");
 
 api.state.date = "2026-06-22";
 api.state.data = {
@@ -345,9 +348,12 @@ def test_site_v2_index_uses_module_navigation():
     html = (PROJECT_ROOT / "site-v2" / "index.html").read_text(encoding="utf-8")
 
     assert 'class="module-nav"' in html
-    for view in ["overview", "long", "short", "early", "trend", "search"]:
+    for view in ["overview", "long", "short", "early", "trajectory", "trend", "search"]:
         assert f'data-view-target="{view}"' in html
         assert f'data-view="{view}"' in html
+
+    assert 'id="monthlyTrajectories"' in html
+    assert html.index('data-view="trajectory"') < html.index('id="monthlyTrajectories"')
 
 
 def test_publish_script_includes_original_root_and_v2_subdirectory():
@@ -363,6 +369,10 @@ def test_publish_script_includes_original_root_and_v2_subdirectory():
         '"site-v2"',
     ]:
         assert expected in source
+
+    assert '"base_tree"' in source
+    assert '"parents": [parent_sha]' in source
+    assert '"force": False' in source
 
 
 def test_v2_requirements_document_records_confirmed_scope():

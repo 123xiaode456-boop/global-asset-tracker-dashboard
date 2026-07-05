@@ -36,6 +36,15 @@ def main() -> int:
         }
     )
     base = f"https://api.github.com/repos/{OWNER}/{REPO}"
+    ref_url = f"{base}/git/refs/heads/gh-pages"
+    ref_response = session.get(ref_url)
+    parent_sha = None
+    base_tree = None
+    if ref_response.status_code != 404:
+        _check(ref_response)
+        parent_sha = ref_response.json()["object"]["sha"]
+        parent = _check(session.get(f"{base}/git/commits/{parent_sha}"))
+        base_tree = parent["tree"]["sha"]
 
     items = []
     for path, source in FILES:
@@ -49,21 +58,25 @@ def main() -> int:
         items.append({"path": path, "mode": "100644", "type": "blob", "sha": blob["sha"]})
         print(f"blob: {path} bytes={len(raw)}")
 
-    tree = _check(session.post(f"{base}/git/trees", json={"tree": items}))
+    tree_payload = {"tree": items}
+    if base_tree:
+        tree_payload["base_tree"] = base_tree
+    tree = _check(session.post(f"{base}/git/trees", json=tree_payload))
     commit = _check(
         session.post(
             f"{base}/git/commits",
-            json={"message": "Deploy static global asset dashboard", "tree": tree["sha"], "parents": []},
+            json={
+                "message": "Deploy static global asset dashboard",
+                "tree": tree["sha"],
+                "parents": [parent_sha] if parent_sha else [],
+            },
         )
     )
-    ref_url = f"{base}/git/refs/heads/gh-pages"
-    ref_response = session.get(ref_url)
-    if ref_response.status_code == 404:
+    if parent_sha is None:
         _check(session.post(f"{base}/git/refs", json={"ref": "refs/heads/gh-pages", "sha": commit["sha"]}))
         print("created gh-pages")
     else:
-        _check(ref_response)
-        _check(session.patch(ref_url, json={"sha": commit["sha"], "force": True}))
+        _check(session.patch(ref_url, json={"sha": commit["sha"], "force": False}))
         print("updated gh-pages")
     print(commit["sha"])
     return 0
