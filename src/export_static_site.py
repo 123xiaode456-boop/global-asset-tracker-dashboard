@@ -9,6 +9,7 @@ from typing import Any
 
 from asset_tracker.cli import DEFAULT_DB
 from asset_tracker.dashboard_data import load_dashboard_snapshot
+from asset_tracker.database import AssetDatabase
 from asset_tracker.futures_quadrant import load_futures_commodity_trajectories
 
 
@@ -29,12 +30,15 @@ def export_static_site(db_path: str | Path = DEFAULT_DB, site_dir: str | Path = 
 
 
 def build_static_payload(db_path: str | Path) -> dict[str, Any]:
+    db = AssetDatabase(db_path)
+    db.initialize()
     all_snapshot = load_dashboard_snapshot(db_path)
     dataset_types = all_snapshot.dataset_types
     dataset_options: list[str | None] = [None, *dataset_types]
 
     snapshots: dict[str, Any] = {}
     dates_by_type: dict[str, list[str]] = {}
+    rows_for_prices: dict[str, dict[str, Any]] = {}
     for dataset_type in dataset_options:
         key_type = dataset_type or "all"
         base_snapshot = load_dashboard_snapshot(db_path, dataset_type)
@@ -42,6 +46,9 @@ def build_static_payload(db_path: str | Path) -> dict[str, Any]:
         for dataset_date in base_snapshot.available_dates:
             snapshot = load_dashboard_snapshot(db_path, dataset_type, dataset_date)
             snapshots[f"{key_type}|{dataset_date}"] = _snapshot_payload(snapshot)
+            for row in snapshot.latest_rows:
+                asset_key = str(row.get("asset_key") or f"{row.get('asset_code')}|{row.get('asset_name')}")
+                rows_for_prices[asset_key] = row
 
     futures_by_date: dict[str, list[dict[str, Any]]] = {}
     for dataset_date in dates_by_type.get("core", []):
@@ -57,6 +64,8 @@ def build_static_payload(db_path: str | Path) -> dict[str, Any]:
             for item in trajectories
         ]
 
+    price_histories, price_coverage = _price_payloads(db, rows_for_prices)
+
     return _clean(
         {
             "generatedAt": datetime.now().isoformat(timespec="seconds"),
@@ -64,6 +73,8 @@ def build_static_payload(db_path: str | Path) -> dict[str, Any]:
             "datesByType": dates_by_type,
             "snapshots": snapshots,
             "futuresByDate": futures_by_date,
+            "priceHistories": price_histories,
+            "priceCoverage": price_coverage,
         }
     )
 
@@ -81,6 +92,42 @@ def _snapshot_payload(snapshot) -> dict[str, Any]:
         "longOpportunities": snapshot.long_opportunities,
         "shortOpportunities": snapshot.short_opportunities,
     }
+
+
+def _price_payloads(
+    db: AssetDatabase,
+    rows_by_asset_key: dict[str, dict[str, Any]],
+) -> tuple[dict[str, list[dict[str, Any]]], dict[str, dict[str, Any]]]:
+    histories: dict[str, list[dict[str, Any]]] = {}
+    coverage: dict[str, dict[str, Any]] = {}
+    for asset_key, row in rows_by_asset_key.items():
+        asset_code = str(row.get("asset_code") or "")
+        history = db.get_price_history(asset_key)
+        if not history and asset_code:
+            history = db.get_price_history(asset_code)
+        cleaned_history = [
+            {
+                "bar_date": item.get("bar_date"),
+                "open": item.get("open"),
+                "high": item.get("high"),
+                "low": item.get("low"),
+                "close": item.get("close"),
+                "volume": item.get("volume"),
+                "source": item.get("source"),
+            }
+            for item in history
+        ]
+        if cleaned_history:
+            histories[asset_key] = cleaned_history
+        coverage[asset_key] = {
+            "asset_code": asset_code,
+            "asset_name": row.get("asset_name"),
+            "asset_name_cn": row.get("asset_name_cn"),
+            "hasPrice": bool(cleaned_history),
+            "priceRows": len(cleaned_history),
+            "latestPriceDate": cleaned_history[-1]["bar_date"] if cleaned_history else None,
+        }
+    return histories, coverage
 
 
 def _clean(value: Any) -> Any:

@@ -11,11 +11,16 @@ OWNER = "123xiaode456-boop"
 REPO = "global-asset-tracker-dashboard"
 ROOT = Path(__file__).resolve().parents[1]
 SITE = ROOT / "site"
+SITE_V2 = ROOT / "site-v2"
 FILES = [
     ("index.html", SITE / "index.html"),
     ("app.js", SITE / "app.js"),
     ("styles.css", SITE / "styles.css"),
     ("data/app-data.json", SITE / "data" / "app-data.json"),
+    ("v2/index.html", SITE_V2 / "index.html"),
+    ("v2/app.js", SITE_V2 / "app.js"),
+    ("v2/styles.css", SITE_V2 / "styles.css"),
+    ("v2/data/app-data.json", SITE_V2 / "data" / "app-data.json"),
 ]
 
 
