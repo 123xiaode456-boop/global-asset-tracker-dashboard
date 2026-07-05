@@ -13,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SITE = ROOT / "site"
 SITE_V2 = ROOT / "site-v2"
 FILES = [
+    (".nojekyll", SITE / ".nojekyll"),
     ("index.html", SITE / "index.html"),
     ("app.js", SITE / "app.js"),
     ("styles.css", SITE / "styles.css"),

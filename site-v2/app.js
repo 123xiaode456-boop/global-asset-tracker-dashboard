@@ -288,9 +288,9 @@ function renderRelativeCrossSection(rows) {
 }
 
 function renderMonthlyTrajectories() {
-  const latestCoreDate = (state.data.datesByType.core || []).at(-1);
-  const source = state.data.futuresByDate[latestCoreDate] || [];
-  const cutoff = monthCutoff(latestCoreDate);
+  const date = selectedCoreDate();
+  const source = state.data.futuresByDate[date] || [];
+  const cutoff = monthCutoff(date);
   const filtered = source
     .filter((item) => REQUIRED_FUTURES_GROUPS.includes(item.group))
     .map((item) => ({ ...item, points: item.points.filter((point) => point.date >= cutoff) }))
@@ -308,9 +308,9 @@ function renderMonthlyTrajectories() {
 }
 
 function renderTrendBars() {
-  const latestCoreDate = (state.data.datesByType.core || []).at(-1);
-  const dates = (state.data.datesByType.core || []).filter((date) => date >= monthCutoff(latestCoreDate));
-  const latestFutures = state.data.futuresByDate[latestCoreDate] || [];
+  const date = selectedCoreDate();
+  const dates = coreDatesInLast30Days(date);
+  const latestFutures = state.data.futuresByDate[date] || [];
   const byKey = new Map(latestFutures.map((item) => [item.assetKey, item.group]));
   const byCode = new Map(latestFutures.map((item) => [item.assetCode, item.group]));
   document.querySelector("#trendBars").innerHTML = REQUIRED_FUTURES_GROUPS
@@ -514,6 +514,15 @@ function sumTrendBars(rows, period) {
 
 function periodLabel(period) {
   return { day: "日K", week: "周K", month: "月K" }[period] || period;
+}
+
+function selectedCoreDate() {
+  return state.date || (state.data?.datesByType?.core || []).at(-1) || "";
+}
+
+function coreDatesInLast30Days(dateText) {
+  const cutoff = monthCutoff(dateText);
+  return (state.data?.datesByType?.core || []).filter((date) => date >= cutoff && date <= dateText);
 }
 
 function monthCutoff(dateText) {

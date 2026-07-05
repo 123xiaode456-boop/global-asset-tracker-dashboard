@@ -43,6 +43,8 @@ globalThis.__api = {
   hasRelativeStateBarOne,
   decisionLabel,
   monthCutoff,
+  selectedCoreDate,
+  coreDatesInLast30Days,
   drawKline,
   priceHistory,
   toWeeklyBars,
@@ -90,6 +92,9 @@ assert.strictEqual(api.monthCutoff("2026-06-22"), "2026-05-23");
 
 api.state.date = "2026-06-22";
 api.state.data = {
+  datesByType: {
+    core: ["2026-05-20", "2026-05-23", "2026-06-01", "2026-06-22", "2026-07-03"],
+  },
   futuresByDate: {
     "2026-06-22": [
       { assetKey: "A|Alpha", assetCode: "A", group: "化工品" },
@@ -97,6 +102,8 @@ api.state.data = {
     ],
   },
 };
+assert.strictEqual(api.selectedCoreDate(), "2026-06-22");
+assert.strictEqual(JSON.stringify(api.coreDatesInLast30Days("2026-06-22")), JSON.stringify(["2026-05-23", "2026-06-01", "2026-06-22"]));
 assert.strictEqual(JSON.stringify(api.currentCommodityRows([
   { ...rows[1], asset_key: "A|Alpha" },
   { ...rows[2], asset_key: "C|Alpha" },
