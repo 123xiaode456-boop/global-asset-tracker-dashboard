@@ -314,6 +314,10 @@ tr.bar-one td {
   min-height: 380px;
 }
 
+#relativeCrossSection {
+  min-height: 720px;
+}
+
 .group-title {
   margin: 18px 0 12px;
   padding-top: 8px;
