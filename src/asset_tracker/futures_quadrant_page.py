@@ -8,7 +8,7 @@ import streamlit as st
 from .cli import DEFAULT_DB
 from .auth import require_access
 from .database import AssetDatabase
-from .futures_quadrant import FuturesTrajectory, futures_quadrant_figure, load_futures_commodity_trajectories
+from .futures_quadrant import REQUESTED_GROUPS, FuturesTrajectory, futures_quadrant_figure, load_futures_commodity_trajectories
 from .navigation import render_navigation
 
 
@@ -38,6 +38,7 @@ def run_page(default_db: str | Path = DEFAULT_DB) -> None:
 def render_futures_trajectory_grid(
     trajectories: list[FuturesTrajectory],
     *,
+    selected_group: str | None = None,
     st_api=st,
     columns_per_row: int = 2,
 ) -> None:
@@ -45,22 +46,25 @@ def render_futures_trajectory_grid(
         st_api.info("当前日期暂无可展示的期货品种四象限轨迹。")
         return
 
-    st_api.caption(f"共 {len(trajectories)} 个期货品种；每个小图展示一个品种在四象限中的位置移动曲线。")
+    available_groups = [group for group in REQUESTED_GROUPS if any(item.group == group for item in trajectories)]
+    if not available_groups:
+        st_api.info("当前日期暂无可展示的期货品种四象限轨迹。")
+        return
+    if selected_group not in available_groups:
+        selected_group = st_api.radio("选择板块", available_groups, horizontal=True, key="futures-quadrant-group")
+    filtered = [item for item in trajectories if item.group == selected_group]
+
+    st_api.caption(
+        f"{selected_group}：共 {len(filtered)} 个期货品种；每个小图展示一个品种在四象限中的位置移动曲线。"
+    )
     used_keys: dict[str, int] = {}
-    current_group = None
     columns = []
-    group_index = 0
 
-    for item in trajectories:
-        if item.group != current_group:
-            current_group = item.group
-            group_index = 0
-            st_api.subheader(current_group)
-            columns = []
-
-        if group_index % columns_per_row == 0:
+    st_api.subheader(selected_group)
+    for index, item in enumerate(filtered):
+        if index % columns_per_row == 0:
             columns = st_api.columns(columns_per_row)
-        column = columns[group_index % columns_per_row]
+        column = columns[index % columns_per_row]
         key = _unique_chart_key(item, used_keys)
         column.markdown(f"**{item.display_name}**  `{item.asset_code}`")
         column.plotly_chart(
@@ -68,7 +72,6 @@ def render_futures_trajectory_grid(
             width="stretch",
             key=key,
         )
-        group_index += 1
 
 
 def _unique_chart_key(item: FuturesTrajectory, used_keys: dict[str, int]) -> str:

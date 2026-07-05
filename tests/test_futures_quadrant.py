@@ -47,10 +47,10 @@ def test_load_futures_commodity_trajectories_returns_daily_paths(tmp_path):
 
     trajectories = load_futures_commodity_trajectories(db.path, dataset_date="2026-06-10")
 
-    assert [item.asset_code for item in trajectories] == ["GC1!", "CU1!"]
-    assert [item.group for item in trajectories] == ["贵金属", "有色"]
-    assert [point.date for point in trajectories[0].points] == ["2026-06-09", "2026-06-10"]
-    assert [(point.x, point.y) for point in trajectories[0].points] == [(-5.0, -4.0), (-2.0, -1.0)]
+    assert [item.asset_code for item in trajectories] == ["CU1!", "GC1!"]
+    assert [item.group for item in trajectories] == ["有色", "贵金属"]
+    assert [point.date for point in trajectories[1].points] == ["2026-06-09", "2026-06-10"]
+    assert [(point.x, point.y) for point in trajectories[1].points] == [(-5.0, -4.0), (-2.0, -1.0)]
 
 
 def test_futures_quadrant_figure_draws_one_trace_per_futures_asset():
@@ -68,7 +68,7 @@ def test_futures_quadrant_figure_draws_one_trace_per_futures_asset():
     assert "Leading" in [annotation.text for annotation in figure.layout.annotations]
 
 
-def test_render_futures_trajectory_grid_draws_one_chart_per_asset():
+def test_render_futures_trajectory_grid_draws_one_chart_per_asset_in_selected_group():
     trajectories = [
         _trajectory("BU1!", "沥青期货", "化工品", [("2026-06-09", -3.0, 2.0), ("2026-06-10", 1.0, 4.0)]),
         _trajectory("GC1!", "黄金期货", "贵金属", [("2026-06-09", -5.0, -4.0), ("2026-06-10", -2.0, -1.0)]),
@@ -76,18 +76,21 @@ def test_render_futures_trajectory_grid_draws_one_chart_per_asset():
     ]
     fake_st = _FakeStreamlit()
 
-    render_futures_trajectory_grid(trajectories, st_api=fake_st, columns_per_row=2)
+    render_futures_trajectory_grid(trajectories, selected_group="化工品", st_api=fake_st, columns_per_row=2)
 
-    assert len(fake_st.plotly_calls) == 3
+    assert len(fake_st.plotly_calls) == 1
     assert [call["key"] for call in fake_st.plotly_calls] == [
         "futures-commodity-quadrant-BU1",
-        "futures-commodity-quadrant-GC1",
-        "futures-commodity-quadrant-CU1",
     ]
     assert [trace.name for trace in fake_st.plotly_calls[0]["figure"].data] == ["沥青期货"]
-    assert [trace.name for trace in fake_st.plotly_calls[1]["figure"].data] == ["黄金期货"]
-    assert [trace.name for trace in fake_st.plotly_calls[2]["figure"].data] == ["阴极铜期货"]
     assert all(len(call["figure"].data) == 1 for call in fake_st.plotly_calls)
+
+    fake_st = _FakeStreamlit()
+    render_futures_trajectory_grid(trajectories, selected_group="贵金属", st_api=fake_st, columns_per_row=2)
+
+    assert len(fake_st.plotly_calls) == 1
+    assert [call["key"] for call in fake_st.plotly_calls] == ["futures-commodity-quadrant-GC1"]
+    assert [trace.name for trace in fake_st.plotly_calls[0]["figure"].data] == ["黄金期货"]
 
 
 class _FakeColumn:

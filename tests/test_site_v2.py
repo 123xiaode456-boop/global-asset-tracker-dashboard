@@ -19,9 +19,18 @@ source = source.replace(/\nmain\(\)\.catch\([\s\S]*?\);\s*$/, "\n");
 const context = {
   console,
   __plots: [],
+  __elements: {},
   Plotly: {
     newPlot: (...args) => {
       context.__plots.push(args);
+    },
+  },
+  document: {
+    querySelector: (selector) => {
+      if (!context.__elements[selector]) {
+        context.__elements[selector] = { innerHTML: "" };
+      }
+      return context.__elements[selector];
     },
   },
   requestAnimationFrame: (fn) => fn(),
@@ -45,6 +54,9 @@ globalThis.__api = {
   monthCutoff,
   selectedCoreDate,
   coreDatesInLast30Days,
+  selectedQuadrantGroup,
+  selectQuadrantGroup,
+  renderMonthlyTrajectories,
   drawKline,
   priceHistory,
   toWeeklyBars,
@@ -100,6 +112,29 @@ api.state.data = {
       { assetKey: "A|Alpha", assetCode: "A", group: "化工品" },
       { assetKey: "C|Alpha", assetCode: "C", group: "贵金属" },
     ],
+    "2026-07-03": [
+      {
+        assetKey: "CHEM1|Chem One",
+        assetCode: "CHEM1",
+        displayName: "化工一号",
+        group: "化工品",
+        points: [{ date: "2026-07-03", x: 1, y: 2 }],
+      },
+      {
+        assetKey: "CHEM2|Chem Two",
+        assetCode: "CHEM2",
+        displayName: "化工二号",
+        group: "化工品",
+        points: [{ date: "2026-07-03", x: 2, y: 3 }],
+      },
+      {
+        assetKey: "GOLD1|Gold",
+        assetCode: "GOLD1",
+        displayName: "黄金",
+        group: "贵金属",
+        points: [{ date: "2026-07-03", x: 4, y: 5 }],
+      },
+    ],
   },
 };
 assert.strictEqual(api.selectedCoreDate(), "2026-06-22");
@@ -109,6 +144,21 @@ assert.strictEqual(JSON.stringify(api.currentCommodityRows([
   { ...rows[2], asset_key: "C|Alpha" },
   { ...rows[2], asset_code: "C", asset_key: "C|Wrong" },
 ]).map((row) => row.asset_key)), JSON.stringify(["A|Alpha", "C|Alpha"]));
+api.state.date = "2026-07-03";
+context.__plots = [];
+api.renderMonthlyTrajectories();
+assert.strictEqual(api.selectedQuadrantGroup(), "化工品");
+assert.ok(context.__elements["#monthlyTrajectories"].innerHTML.includes("quadrant-tabs"));
+assert.ok(context.__elements["#monthlyTrajectories"].innerHTML.includes("quadrant-grid"));
+assert.ok(context.__elements["#monthlyTrajectories"].innerHTML.includes("化工一号"));
+assert.ok(context.__elements["#monthlyTrajectories"].innerHTML.includes("化工二号"));
+assert.ok(!context.__elements["#monthlyTrajectories"].innerHTML.includes("黄金"));
+assert.strictEqual(context.__plots.length, 2);
+assert.strictEqual(JSON.stringify(context.__plots.map((plot) => plot[0])), JSON.stringify(["quadrant-化工品-0", "quadrant-化工品-1"]));
+api.selectQuadrantGroup("贵金属");
+assert.strictEqual(api.selectedQuadrantGroup(), "贵金属");
+assert.ok(context.__elements["#monthlyTrajectories"].innerHTML.includes("黄金"));
+assert.ok(!context.__elements["#monthlyTrajectories"].innerHTML.includes("化工一号"));
 assert.strictEqual(JSON.stringify(api.barAlertRows(rows).map((row) => row.asset_code)), JSON.stringify(["A", "B"]));
 assert.strictEqual(JSON.stringify(api.barOneReasons({ ...base, relative_state_duration: 1, day_trend_duration: 1, capital_state_duration: 1 })), JSON.stringify(["比价=1", "日K=1", "资金=1"]));
 assert.strictEqual(JSON.stringify(api.SEARCH_COLUMNS.map((item) => item[0])), JSON.stringify([
@@ -158,7 +208,17 @@ assert.ok(api.toWeeklyBars(bars).length < bars.length);
 def test_site_v2_styles_support_kline_and_missing_panels():
     css = (PROJECT_ROOT / "site-v2" / "styles.css").read_text(encoding="utf-8")
 
-    for selector in [".kline-summary", ".missing", ".kline-grid", ".kline-card", ".kline-chart"]:
+    for selector in [
+        ".kline-summary",
+        ".missing",
+        ".kline-grid",
+        ".kline-card",
+        ".kline-chart",
+        ".quadrant-tabs",
+        ".quadrant-grid",
+        ".quadrant-card",
+        ".quadrant-chart",
+    ]:
         assert selector in css
 
 

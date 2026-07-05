@@ -80,14 +80,16 @@ def test_futures_quadrant_page_renders_separate_asset_chart_grid():
     subheaders = [element.value for element in app.subheader]
     text_input_labels = [element.label for element in app.text_input]
     selectbox_labels = [element.label for element in app.selectbox]
+    radio_labels = [element.label for element in app.radio]
     main_children = app._tree[0].children
 
     assert "期货品种四象限位置变化" in titles
     assert "页面导航" in markdown_text
     assert "主仪表盘" in markdown_text
-    assert any("每个小图展示一个品种" in value for value in captions)
-    assert {"化工品", "贵金属", "有色", "农产品"}.issubset(set(subheaders))
+    assert any("化工品：共" in value and "每个小图展示一个品种" in value for value in captions)
+    assert subheaders == ["化工品"]
     assert text_input_labels == ["数据库"]
     assert selectbox_labels == ["观察日期"]
+    assert radio_labels == ["选择板块"]
     assert len(main_children) > 10
     assert len(app.dataframe) == 0

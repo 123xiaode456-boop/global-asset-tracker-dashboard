@@ -11,7 +11,7 @@ from .asset_names import display_asset_name
 from .database import AssetDatabase
 
 
-REQUESTED_GROUPS = ("化工品", "贵金属", "有色", "农产品")
+REQUESTED_GROUPS = ("化工品", "农产品", "有色", "贵金属")
 
 FUTURES_GROUP_BY_NAME = {
     "铸造铝合金期货": "有色",

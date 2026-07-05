@@ -2,6 +2,7 @@ const state = {
   data: null,
   datasetKey: "core",
   date: "",
+  quadrantGroup: "化工品",
   search: "",
 };
 
@@ -295,16 +296,37 @@ function renderMonthlyTrajectories() {
     .filter((item) => REQUIRED_FUTURES_GROUPS.includes(item.group))
     .map((item) => ({ ...item, points: item.points.filter((point) => point.date >= cutoff) }))
     .filter((item) => item.points.length);
-  const groups = groupBy(filtered, (item) => item.group);
+  const group = selectedQuadrantGroup();
+  const items = filtered.filter((item) => item.group === group);
 
-  document.querySelector("#monthlyTrajectories").innerHTML = REQUIRED_FUTURES_GROUPS
-    .map((group) => `<h3 class="group-title">${group}</h3><div class="wide-chart" id="monthly-${slug(group)}"></div>`)
-    .join("");
+  document.querySelector("#monthlyTrajectories").innerHTML = `
+    <div class="quadrant-tabs">
+      ${REQUIRED_FUTURES_GROUPS.map(
+        (name) =>
+          `<button class="quadrant-tab ${name === group ? "active" : ""}" type="button" onclick="selectQuadrantGroup('${escapeHtml(name)}')">${escapeHtml(name)}</button>`
+      ).join("")}
+    </div>
+    <div class="kline-summary">${escapeHtml(group)}：${items.length} 个品种；每个品种单独一张四象限图，轨迹范围为当前日期往前 30 自然日内已有数据。</div>
+    ${
+      items.length
+        ? `<div class="quadrant-grid">
+            ${items
+              .map(
+                (item, index) => `
+                  <article class="quadrant-card">
+                    <h3>${escapeHtml(item.displayName)} <code>${escapeHtml(item.assetCode)}</code></h3>
+                    <div class="quadrant-chart" id="quadrant-${slug(group)}-${index}"></div>
+                  </article>`
+              )
+              .join("")}
+          </div>`
+        : `<div class="empty">当前日期下没有 ${escapeHtml(group)} 的四象限轨迹数据。</div>`
+    }
+  `;
 
-  for (const group of REQUIRED_FUTURES_GROUPS) {
-    const items = groups[group] || [];
-    drawQuadrantBundle(`monthly-${slug(group)}`, items, `${group} 一个月轨迹线`);
-  }
+  items.forEach((item, index) => {
+    drawQuadrantBundle(`quadrant-${slug(group)}-${index}`, [item], `${item.displayName} 一个月轨迹线`);
+  });
 }
 
 function renderTrendBars() {
@@ -518,6 +540,16 @@ function periodLabel(period) {
 
 function selectedCoreDate() {
   return state.date || (state.data?.datesByType?.core || []).at(-1) || "";
+}
+
+function selectedQuadrantGroup() {
+  return REQUIRED_FUTURES_GROUPS.includes(state.quadrantGroup) ? state.quadrantGroup : REQUIRED_FUTURES_GROUPS[0];
+}
+
+function selectQuadrantGroup(group) {
+  if (!REQUIRED_FUTURES_GROUPS.includes(group)) return;
+  state.quadrantGroup = group;
+  renderMonthlyTrajectories();
 }
 
 function coreDatesInLast30Days(dateText) {
