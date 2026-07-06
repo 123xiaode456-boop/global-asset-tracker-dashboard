@@ -75,6 +75,14 @@
         <h2>三、早期转折</h2>
         <p class="chart-request">【四象限当前比价状态横截面 按当前比价状态确定象限】</p>
         <p class="rule">横轴为当前比价状态持续时间，左右两侧刻度均显示正数；纵轴为当前比价状态涨跌幅绝对值，上下两侧刻度均显示正数；红点代表上涨，绿点代表下跌。</p>
+        <div class="early-filter">
+          <label>
+            标的搜索
+            <input id="earlyAssetSearch" type="search" placeholder="代码 / 中文 / 英文名称" oninput="setEarlySearch(this.value)" />
+          </label>
+          <button id="earlyResetSearch" class="secondary-button" type="button" onclick="resetEarlySearch()">复原</button>
+          <span id="earlySearchStatus" class="filter-status"></span>
+        </div>
         <div id="relativeCrossSection" class="wide-chart"></div>
       </section>
 

@@ -10,6 +10,7 @@ const state = {
   quadrantGroup: "化工品",
   trendGroup: "化工品",
   search: "",
+  earlySearch: "",
 };
 
 const GROUP_COLORS = {
@@ -138,7 +139,7 @@ function render() {
   document.querySelector("#shortMatrix").innerHTML = tableHtml(sortPreview(shortRows), MATRIX_COLUMNS);
   renderKlinePanel("#longKlinePanel", sortPreview(longRows));
   renderKlinePanel("#shortKlinePanel", sortPreview(shortRows));
-  renderRelativeCrossSection(rows);
+  renderEarlyView(rows);
   renderMonthlyTrajectories();
   renderTrendBars();
   renderSearch();
@@ -282,6 +283,43 @@ function renderKlinePanel(selector, rows) {
       drawKline(chartDomId(selector, row, index, "weekly"), toWeeklyBars(daily), `${displayName(row)} 周K`);
     });
   });
+}
+
+function renderEarlyView(rows = currentCommodityRows(currentSnapshot()?.latestRows || [])) {
+  const filteredRows = filterEarlyRows(rows);
+  syncEarlySearchInput();
+  renderEarlySearchStatus(rows.length, filteredRows.length);
+  renderRelativeCrossSection(filteredRows);
+}
+
+function filterEarlyRows(rows) {
+  const query = text(state.earlySearch).trim().toLowerCase();
+  if (!query) return rows;
+  return rows.filter((row) => {
+    const fields = [row.asset_code, row.asset_name_cn, row.asset_name, row.asset_key, displayName(row)];
+    return fields.some((value) => text(value).toLowerCase().includes(query));
+  });
+}
+
+function setEarlySearch(value) {
+  state.earlySearch = text(value).trim();
+  renderEarlyView();
+}
+
+function resetEarlySearch() {
+  state.earlySearch = "";
+  renderEarlyView();
+}
+
+function syncEarlySearchInput() {
+  const input = document.querySelector("#earlyAssetSearch");
+  if (input && input.value !== state.earlySearch) input.value = state.earlySearch;
+}
+
+function renderEarlySearchStatus(totalCount, filteredCount) {
+  const status = document.querySelector("#earlySearchStatus");
+  if (!status) return;
+  status.textContent = `${filteredCount} / ${totalCount}`;
 }
 
 function renderRelativeCrossSection(rows) {
