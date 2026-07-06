@@ -316,8 +316,9 @@ function renderRelativeCrossSection(rows) {
     "relativeCrossSection",
     traces,
     {
-      height: 720,
-      margin: { l: 70, r: 28, t: 24, b: 64 },
+      autosize: true,
+      height: 900,
+      margin: { l: 78, r: 18, t: 20, b: 72 },
       xaxis: { title: "当前比价状态持续时间（左右均为正值）", ...xAxis },
       yaxis: { title: "当前比价状态涨跌幅绝对值（上下均为正值）", ...yAxis },
       shapes: quadrantShapesXY(xAxis.outer, yAxis.outer),
@@ -629,8 +630,8 @@ function quadrantShapesXY(xAxis, yAxis) {
     [0, -yAxis, xAxis, 0, "rgba(191,135,0,0.08)"],
   ].map(([x0, y0, x1, y1, fillcolor]) => ({ type: "rect", x0, y0, x1, y1, fillcolor, line: { width: 0 }, layer: "below" }))
     .concat([
-      { type: "line", x0: -xAxis, x1: xAxis, y0: 0, y1: 0, line: { color: "#f2c94c", dash: "dash", width: 6 } },
-      { type: "line", x0: 0, x1: 0, y0: -yAxis, y1: yAxis, line: { color: "#f2c94c", dash: "dash", width: 6 } },
+      { type: "line", x0: -xAxis, x1: xAxis, y0: 0, y1: 0, layer: "above", line: { color: "#ffd84d", dash: "solid", width: 14 } },
+      { type: "line", x0: 0, x1: 0, y0: -yAxis, y1: yAxis, layer: "above", line: { color: "#ffd84d", dash: "solid", width: 14 } },
     ]);
 }
 
@@ -687,6 +688,12 @@ function selectView(view) {
   document.querySelectorAll("[data-view-target]").forEach((button) => {
     button.classList.toggle("active", button.dataset.viewTarget === view);
   });
+  if (view === "early") {
+    requestAnimationFrame(() => {
+      const chart = document.querySelector("#relativeCrossSection");
+      if (chart && globalThis.Plotly?.Plots?.resize) Plotly.Plots.resize(chart);
+    });
+  }
 }
 
 function selectedQuadrantGroup() {

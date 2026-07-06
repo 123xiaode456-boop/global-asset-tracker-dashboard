@@ -20,11 +20,17 @@ const context = {
   console,
   location: { hostname: "123xiaode456-boop.github.io" },
   __plots: [],
+  __resizes: [],
   __elements: {},
   __body: { dataset: {}, classList: { toggle: () => {} } },
   Plotly: {
     newPlot: (...args) => {
       context.__plots.push(args);
+    },
+    Plots: {
+      resize: (target) => {
+        context.__resizes.push(target);
+      },
     },
   },
   document: {
@@ -156,13 +162,17 @@ assert.strictEqual(relativePlot[2].yaxis.title, "当前比价状态涨跌幅绝�
 assert.strictEqual(relativePlot[2].dragmode, "pan");
 assert.strictEqual(relativePlot[3].scrollZoom, true);
 assert.strictEqual(relativePlot[3].displayModeBar, true);
-assert.ok(relativePlot[2].height >= 680);
+assert.strictEqual(relativePlot[2].autosize, true);
+assert.ok(relativePlot[2].height >= 900);
 assert.ok(relativePlot[2].shapes.length >= 6);
 const axisLines = relativePlot[2].shapes.filter((shape) => shape.type === "line");
-assert.ok(axisLines.every((shape) => shape.line.width >= 5));
+assert.ok(axisLines.every((shape) => shape.layer === "above"));
+assert.ok(axisLines.every((shape) => shape.line.dash === "solid"));
+assert.ok(axisLines.every((shape) => shape.line.width >= 14));
 api.selectView("early");
 assert.strictEqual(api.selectedView(), "early");
 assert.strictEqual(context.document.body.dataset.activeView, "early");
+assert.ok(context.__resizes.includes(context.__elements["#relativeCrossSection"]));
 api.selectView("trajectory");
 assert.strictEqual(api.selectedView(), "trajectory");
 assert.strictEqual(context.document.body.dataset.activeView, "trajectory");
@@ -359,6 +369,10 @@ def test_site_v2_styles_support_kline_and_missing_panels():
 
     assert "#0b1018" in css
     assert "#00d4ff" in css
+    assert "#relativeCrossSection" in css
+    assert "min-height: 900px" in css
+    assert "height: 900px" in css
+    assert "width: 100%" in css
 
 
 def test_site_v2_index_uses_module_navigation():
