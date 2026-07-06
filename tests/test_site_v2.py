@@ -37,7 +37,13 @@ const context = {
     body: null,
     querySelector: (selector) => {
       if (!context.__elements[selector]) {
-        context.__elements[selector] = { innerHTML: "", dataset: {}, classList: { toggle: () => {} } };
+        context.__elements[selector] = {
+          innerHTML: "",
+          textContent: "",
+          value: "",
+          dataset: {},
+          classList: { toggle: () => {} },
+        };
       }
       return context.__elements[selector];
     },
@@ -59,6 +65,9 @@ globalThis.__api = {
   barOneReasons,
   filterLong,
   filterShort,
+  filterEarlyRows,
+  setEarlySearch,
+  resetEarlySearch,
   sortPreview,
   hasAnyBarOne,
   hasRelativeStateBarOne,
@@ -172,6 +181,18 @@ assert.ok(axisLines.every((shape) => shape.line.color === "#111111"));
 assert.ok(axisLines.every((shape) => shape.line.width >= 4 && shape.line.width <= 6));
 assert.ok(axisLines.some((shape) => shape.xref === "paper" && shape.x0 === 0 && shape.x1 === 1 && shape.yref === "y" && shape.y0 === 0 && shape.y1 === 0));
 assert.ok(axisLines.some((shape) => shape.xref === "x" && shape.x0 === 0 && shape.x1 === 0 && shape.yref === "paper" && shape.y0 === 0 && shape.y1 === 1));
+const earlyRows = [
+  { asset_code: "CU1!", asset_name_cn: "铜期货", asset_name: "Copper Futures", asset_key: "CU1!|Copper Futures", relative_state: "lead", relative_state_duration: 3, relative_state_return: 2.5 },
+  { asset_code: "AL1!", asset_name_cn: "铝期货", asset_name: "Aluminum Futures", asset_key: "AL1!|Aluminum Futures", relative_state: "improving", relative_state_duration: 4, relative_state_return: -1.25 },
+];
+api.state.earlySearch = "铜";
+assert.strictEqual(JSON.stringify(api.filterEarlyRows(earlyRows).map((row) => row.asset_code)), JSON.stringify(["CU1!"]));
+api.state.earlySearch = "aluminum";
+assert.strictEqual(JSON.stringify(api.filterEarlyRows(earlyRows).map((row) => row.asset_code)), JSON.stringify(["AL1!"]));
+api.state.earlySearch = "CU1";
+assert.strictEqual(JSON.stringify(api.filterEarlyRows(earlyRows).map((row) => row.asset_code)), JSON.stringify(["CU1!"]));
+api.state.earlySearch = "";
+assert.strictEqual(api.filterEarlyRows(earlyRows).length, 2);
 api.selectView("early");
 assert.strictEqual(api.selectedView(), "early");
 assert.strictEqual(context.document.body.dataset.activeView, "early");
@@ -214,10 +235,10 @@ api.state.data = {
         { asset_key: "GOLD1|Gold", asset_code: "GOLD1", day_trend: down, day_trend_duration: 8, week_trend: up, week_trend_duration: 9, month_trend: down, month_trend_duration: 10 },
       ],
     },
-    "core|2026-07-03": {
-      latestDate: "2026-07-03",
-      latestRows: [
-        { asset_key: "CHEM1|Chem One", asset_code: "CHEM1", asset_name: "Chem One", relative_state: "lead", capital_state: "加杠杆", day_trend: up, day_trend_duration: 3, week_trend: up, week_trend_duration: 4, month_trend: up, month_trend_duration: 5 },
+        "core|2026-07-03": {
+          latestDate: "2026-07-03",
+          latestRows: [
+        { asset_key: "CHEM1|Chem One", asset_code: "CHEM1", asset_name_cn: "化工一号", asset_name: "Chem One", relative_state: "lead", relative_state_duration: 3, relative_state_return: 2.5, capital_state: "加杠杆", day_trend: up, day_trend_duration: 3, week_trend: up, week_trend_duration: 4, month_trend: up, month_trend_duration: 5 },
         { asset_key: "CHEM2|Chem Two", asset_code: "CHEM2", day_trend: down, day_trend_duration: 6, week_trend: down, week_trend_duration: 7, month_trend: down, month_trend_duration: 8 },
         { asset_key: "GOLD1|Gold", asset_code: "GOLD1", day_trend: up, day_trend_duration: 9, week_trend: up, week_trend_duration: 10, month_trend: up, month_trend_duration: 11 },
         { asset_key: "UNMAPPED_LONG|Long", asset_code: "UNMAPPED_LONG", asset_name: "Unmapped Long", relative_state: "improving", capital_state: "加杠杆", day_trend: up, day_trend_duration: 2, week_trend: up, week_trend_duration: 3, month_trend: down, month_trend_duration: 4 },
@@ -272,6 +293,21 @@ assert.ok(context.__elements["#longMatrix"].innerHTML.includes(">UNMAPPED_LONG<"
 assert.ok(context.__elements["#shortMatrix"].innerHTML.includes(">UNMAPPED_SHORT<"));
 assert.ok(!context.__elements["#longMatrix"].innerHTML.includes(">NO_SIGNAL<"));
 assert.ok(!context.__elements["#shortMatrix"].innerHTML.includes(">NO_SIGNAL<"));
+context.__plots = [];
+api.setEarlySearch("化工一号");
+assert.strictEqual(api.state.earlySearch, "化工一号");
+assert.strictEqual(context.__elements["#earlyAssetSearch"].value, "化工一号");
+assert.ok(context.__elements["#earlySearchStatus"].textContent.includes("1 / 3"));
+const searchedEarlyPlot = context.__plots.at(-1);
+assert.strictEqual(JSON.stringify(searchedEarlyPlot[1][0].x), JSON.stringify([3]));
+assert.strictEqual(JSON.stringify(searchedEarlyPlot[1][0].text), JSON.stringify(["化工一号"]));
+context.__plots = [];
+api.resetEarlySearch();
+assert.strictEqual(api.state.earlySearch, "");
+assert.strictEqual(context.__elements["#earlyAssetSearch"].value, "");
+assert.ok(context.__elements["#earlySearchStatus"].textContent.includes("3 / 3"));
+const resetEarlyPlot = context.__plots.at(-1);
+assert.strictEqual(resetEarlyPlot[1][0].x.length + resetEarlyPlot[1][1].x.length, 1);
 context.__plots = [];
 api.renderMonthlyTrajectories();
 assert.strictEqual(api.selectedQuadrantGroup(), "化工品");
@@ -389,6 +425,9 @@ def test_site_v2_index_uses_module_navigation():
         assert f'data-view="{view}"' in html
 
     assert 'id="monthlyTrajectories"' in html
+    assert 'id="earlyAssetSearch"' in html
+    assert 'id="earlyResetSearch"' in html
+    assert 'id="earlySearchStatus"' in html
     assert html.index('data-view="trajectory"') < html.index('id="monthlyTrajectories"')
 
 
