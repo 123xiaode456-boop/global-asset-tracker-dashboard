@@ -396,6 +396,7 @@ def test_publish_script_includes_original_root_and_v2_subdirectory():
     source = (PROJECT_ROOT / "scripts" / "publish_static_pages.py").read_text(encoding="utf-8")
 
     for expected in [
+        '".nojekyll"',
         '"index.html"',
         '"data/app-data.json"',
         '"v2/index.html"',
