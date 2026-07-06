@@ -163,12 +163,15 @@ assert.strictEqual(relativePlot[2].dragmode, "pan");
 assert.strictEqual(relativePlot[3].scrollZoom, true);
 assert.strictEqual(relativePlot[3].displayModeBar, true);
 assert.strictEqual(relativePlot[2].autosize, true);
-assert.ok(relativePlot[2].height >= 900);
+assert.ok(relativePlot[2].height >= 740);
 assert.ok(relativePlot[2].shapes.length >= 6);
 const axisLines = relativePlot[2].shapes.filter((shape) => shape.type === "line");
 assert.ok(axisLines.every((shape) => shape.layer === "above"));
 assert.ok(axisLines.every((shape) => shape.line.dash === "solid"));
-assert.ok(axisLines.every((shape) => shape.line.width >= 14));
+assert.ok(axisLines.every((shape) => shape.line.color === "#111111"));
+assert.ok(axisLines.every((shape) => shape.line.width >= 4 && shape.line.width <= 6));
+assert.ok(axisLines.some((shape) => shape.xref === "paper" && shape.x0 === 0 && shape.x1 === 1 && shape.yref === "y" && shape.y0 === 0 && shape.y1 === 0));
+assert.ok(axisLines.some((shape) => shape.xref === "x" && shape.x0 === 0 && shape.x1 === 0 && shape.yref === "paper" && shape.y0 === 0 && shape.y1 === 1));
 api.selectView("early");
 assert.strictEqual(api.selectedView(), "early");
 assert.strictEqual(context.document.body.dataset.activeView, "early");
@@ -370,8 +373,10 @@ def test_site_v2_styles_support_kline_and_missing_panels():
     assert "#0b1018" in css
     assert "#00d4ff" in css
     assert "#relativeCrossSection" in css
-    assert "min-height: 900px" in css
-    assert "height: 900px" in css
+    assert "body[data-active-view=\"early\"] main" in css
+    assert "padding: 12px 8px 48px" in css
+    assert "min-height: 760px" in css
+    assert "height: 760px" in css
     assert "width: 100%" in css
 
 

@@ -317,11 +317,11 @@ function renderRelativeCrossSection(rows) {
     traces,
     {
       autosize: true,
-      height: 900,
-      margin: { l: 78, r: 18, t: 20, b: 72 },
+      height: 760,
+      margin: { l: 76, r: 10, t: 16, b: 68 },
       xaxis: { title: "当前比价状态持续时间（左右均为正值）", ...xAxis },
       yaxis: { title: "当前比价状态涨跌幅绝对值（上下均为正值）", ...yAxis },
-      shapes: quadrantShapesXY(xAxis.outer, yAxis.outer),
+      shapes: quadrantShapesXY(xAxis.outer, yAxis.outer, { fullZeroAxes: true }),
       annotations: quadrantAnnotations(),
       legend: { orientation: "h" },
       dragmode: "pan",
@@ -622,17 +622,24 @@ function quadrantShapes(axis) {
   return quadrantShapesXY(axis, axis);
 }
 
-function quadrantShapesXY(xAxis, yAxis) {
+function quadrantShapesXY(xAxis, yAxis, options = {}) {
+  const axisLine = { color: options.axisColor || "#111111", dash: "solid", width: options.axisWidth || 5 };
+  const zeroAxes = options.fullZeroAxes
+    ? [
+        { type: "line", xref: "paper", x0: 0, x1: 1, yref: "y", y0: 0, y1: 0, layer: "above", line: axisLine },
+        { type: "line", xref: "x", x0: 0, x1: 0, yref: "paper", y0: 0, y1: 1, layer: "above", line: axisLine },
+      ]
+    : [
+        { type: "line", x0: -xAxis, x1: xAxis, y0: 0, y1: 0, layer: "above", line: axisLine },
+        { type: "line", x0: 0, x1: 0, y0: -yAxis, y1: yAxis, layer: "above", line: axisLine },
+      ];
   return [
     [0, 0, xAxis, yAxis, "rgba(46,160,67,0.08)"],
     [-xAxis, 0, 0, yAxis, "rgba(9,105,218,0.08)"],
     [-xAxis, -yAxis, 0, 0, "rgba(207,34,46,0.07)"],
     [0, -yAxis, xAxis, 0, "rgba(191,135,0,0.08)"],
   ].map(([x0, y0, x1, y1, fillcolor]) => ({ type: "rect", x0, y0, x1, y1, fillcolor, line: { width: 0 }, layer: "below" }))
-    .concat([
-      { type: "line", x0: -xAxis, x1: xAxis, y0: 0, y1: 0, layer: "above", line: { color: "#ffd84d", dash: "solid", width: 14 } },
-      { type: "line", x0: 0, x1: 0, y0: -yAxis, y1: yAxis, layer: "above", line: { color: "#ffd84d", dash: "solid", width: 14 } },
-    ]);
+    .concat(zeroAxes);
 }
 
 function quadrantAnnotations() {
