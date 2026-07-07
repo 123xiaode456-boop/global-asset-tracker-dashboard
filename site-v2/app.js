@@ -71,11 +71,15 @@ const SEARCH_COLUMNS = [
 ];
 
 async function main() {
-  const response = await fetch(DATA_URL, { cache: "no-store" });
+  const response = await fetch(currentDataUrl(), { cache: "no-store" });
   state.data = await response.json();
   initControls();
   render();
   selectView(state.activeView);
+}
+
+function currentDataUrl() {
+  return `${DATA_URL}?v=${Date.now()}`;
 }
 
 function initControls() {

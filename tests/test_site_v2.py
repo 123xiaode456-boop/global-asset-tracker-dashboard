@@ -97,12 +97,14 @@ globalThis.__api = {
   SEARCH_COLUMNS,
   MA_WINDOWS,
   DATA_URL,
+  currentDataUrl,
 };`,
   context
 );
 
 const api = context.__api;
 assert.strictEqual(api.DATA_URL, "./data/app-data.json");
+assert.ok(api.currentDataUrl().startsWith("./data/app-data.json?v="));
 const up = "上行趋势";
 const down = "下行趋势";
 const base = {
