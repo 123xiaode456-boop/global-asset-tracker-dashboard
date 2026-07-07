@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import shutil
 from dataclasses import dataclass
 from datetime import datetime
@@ -385,13 +386,38 @@ def _archive_source(source: Path) -> Path:
     target_dir = DEFAULT_RAW_DIR / parsed_metadata.metadata.dataset_date.isoformat()
     target_dir.mkdir(parents=True, exist_ok=True)
     target = target_dir / source.name
-    if source.resolve() != target.resolve():
-        shutil.copy2(source, target)
+    if source.resolve() == target.resolve():
+        return target
+
+    if target.exists():
+        if _file_sha256(source) == _file_sha256(target):
+            return target
+        target = _unique_archive_target(target, source)
+
+    shutil.copy2(source, target)
     return target
 
 
 def _metadata_for_archive(source: Path) -> ParsedDataset:
     return parse_dataset_file(source)
+
+
+def _unique_archive_target(target: Path, source: Path) -> Path:
+    digest = _file_sha256(source)[:8]
+    candidate = target.with_name(f"{target.stem}-{digest}{target.suffix}")
+    counter = 2
+    while candidate.exists() and _file_sha256(candidate) != _file_sha256(source):
+        candidate = target.with_name(f"{target.stem}-{digest}-{counter}{target.suffix}")
+        counter += 1
+    return candidate
+
+
+def _file_sha256(path: Path) -> str:
+    hasher = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
 
 
 def _price_source_for_symbol(symbol: str) -> str:

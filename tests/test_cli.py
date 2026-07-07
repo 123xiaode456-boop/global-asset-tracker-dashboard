@@ -1,6 +1,7 @@
 from datetime import date
 from pathlib import Path
 
+import asset_tracker.cli as cli
 from asset_tracker.cli import run_fetch_prices, run_import, run_import_prices, run_map_symbol
 from asset_tracker.database import AssetDatabase
 from asset_tracker.parsers import DatasetMetadata, ParsedDataset, SOURCE_COLUMNS
@@ -69,6 +70,60 @@ def test_run_import_accepts_daily_excel_and_writes_report(tmp_path):
     report = report_dir / "2026-06-10_core.md"
     assert report.exists()
     assert "SPY" in report.read_text(encoding="utf-8")
+
+
+def test_run_import_archive_raw_reuses_existing_readonly_file(tmp_path, monkeypatch):
+    workbook = tmp_path / "26-06-10 sample.xlsx"
+    _write_minimal_xlsx(
+        workbook,
+        [
+            SOURCE_COLUMNS,
+            [
+                "SPY",
+                "SPDR S&P 500 ETF Trust",
+                "up",
+                1,
+                "up",
+                2,
+                "up",
+                3,
+                0.75,
+                105.5,
+                103.2,
+                101.1,
+                1,
+                "Lead",
+                2.4,
+                "Improving",
+                1.2,
+                5,
+                1,
+                "Leveraging",
+                1.5,
+                "Deleveraging",
+                -0.8,
+                88.2,
+                2.1,
+            ],
+        ],
+    )
+    raw_dir = tmp_path / "raw"
+    db_path = tmp_path / "signals.sqlite"
+    report_dir = tmp_path / "reports"
+    monkeypatch.setattr(cli, "DEFAULT_RAW_DIR", raw_dir)
+
+    first = run_import([workbook], db_path=db_path, report_dir=report_dir, archive_raw=True)
+    archived = raw_dir / "2026-06-10" / workbook.name
+    archived.chmod(0o444)
+    try:
+        second = run_import([workbook], db_path=db_path, report_dir=report_dir, archive_raw=True)
+    finally:
+        archived.chmod(0o666)
+
+    assert first[0].inserted_rows == 1
+    assert archived.exists()
+    assert second[0].duplicate
+    assert second[0].inserted_rows == 0
 
 
 def test_run_fetch_prices_stores_bars_for_latest_observation(tmp_path, monkeypatch):
