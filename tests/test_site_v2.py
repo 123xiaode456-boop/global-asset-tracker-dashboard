@@ -7,6 +7,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 NODE = Path.home() / ".cache" / "codex-runtimes" / "codex-primary-runtime" / "dependencies" / "node" / "bin" / "node.exe"
 
 
+def test_site_v2_index_cache_busts_app_script():
+    html = (PROJECT_ROOT / "site-v2" / "index.html").read_text(encoding="utf-8")
+
+    assert '<script src="./app.js?v=' in html
+
+
 def test_site_v2_frontend_rules_with_node():
     script = r"""
 const fs = require("fs");
