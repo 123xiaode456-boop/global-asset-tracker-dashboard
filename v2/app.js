@@ -524,6 +524,7 @@ function drawQuadrantBundle(elementId, items, title) {
       xaxis: { title: "相对强度 - 100", range: [-axis, axis], zeroline: false },
       yaxis: { title: "强度动量 - 100", range: [-axis, axis], zeroline: false, scaleanchor: "x", scaleratio: 1 },
       shapes: quadrantShapes(axis),
+      annotations: quadrantAnnotations({ color: "rgba(128, 91, 0, 0.72)", size: 14 }),
       showlegend: false,
     },
     { displayModeBar: false, responsive: true }
@@ -682,7 +683,9 @@ function quadrantShapesXY(xAxis, yAxis, options = {}) {
     .concat(zeroAxes);
 }
 
-function quadrantAnnotations() {
+function quadrantAnnotations(options = {}) {
+  const color = options.color || "rgba(154, 103, 0, 0.74)";
+  const size = options.size || 13;
   return [
     { text: "Improving", x: 0.06, y: 0.94 },
     { text: "Leading", x: 0.94, y: 0.94 },
@@ -693,7 +696,7 @@ function quadrantAnnotations() {
     xref: "paper",
     yref: "paper",
     showarrow: false,
-    font: { size: 13, color: "#9a6700" },
+    font: { size, color },
   }));
 }
 
