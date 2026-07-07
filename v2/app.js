@@ -1,6 +1,4 @@
-const RAW_DATA_URL =
-  "https://raw.githubusercontent.com/123xiaode456-boop/global-asset-tracker-dashboard/main/site-v2/data/app-data.json";
-const DATA_URL = globalThis.location?.hostname?.endsWith("github.io") ? RAW_DATA_URL : "./data/app-data.json";
+const DATA_URL = "./data/app-data.json";
 
 const state = {
   data: null,
