@@ -107,9 +107,14 @@ print(f"verified: latest_date={date} latest_rows={rows} bytes={p.stat().st_size}
   }
 
   if ($Publish) {
-    & $py (Join-Path $ProjectRoot "scripts\publish_site_data_main.py") --message "Update v2 data"
+    & $py (Join-Path $ProjectRoot "scripts\publish_site_data_main.py") --branch main --message "Update v2 data"
     if ($LASTEXITCODE -ne 0) {
-      throw "Publish failed with exit code $LASTEXITCODE"
+      throw "Main data publish failed with exit code $LASTEXITCODE"
+    }
+
+    & $py (Join-Path $ProjectRoot "scripts\publish_site_data_main.py") --branch gh-pages --message "Deploy v2 data" --file "site-v2/data/app-data.json=v2/data/app-data.json"
+    if ($LASTEXITCODE -ne 0) {
+      throw "GitHub Pages data publish failed with exit code $LASTEXITCODE"
     }
   }
 }

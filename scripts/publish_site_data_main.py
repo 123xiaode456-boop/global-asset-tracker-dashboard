@@ -22,7 +22,7 @@ def main() -> int:
     parser.add_argument("--file", action="append", dest="files")
     args = parser.parse_args()
 
-    files = args.files or DEFAULT_FILES
+    files = [_parse_file_mapping(item) for item in (args.files or DEFAULT_FILES)]
     token = subprocess.check_output([_gh_path(), "auth", "token"], text=True).strip()
     session = requests.Session()
     session.headers.update(
@@ -40,13 +40,13 @@ def main() -> int:
     base_tree = parent["tree"]["sha"]
 
     items = []
-    for rel in files:
-        source = ROOT / rel
+    for source_rel, remote_path in files:
+        source = ROOT / source_rel
         raw = source.read_bytes()
         local_sha = _git_blob_sha(raw)
-        remote_sha = _remote_blob_sha(session, base, rel, args.branch)
+        remote_sha = _remote_blob_sha(session, base, remote_path, args.branch)
         if remote_sha == local_sha:
-            print(f"unchanged: {rel}")
+            print(f"unchanged: {source_rel} -> {remote_path}")
             continue
 
         blob = _check(
@@ -56,8 +56,8 @@ def main() -> int:
                 timeout=180,
             )
         )
-        items.append({"path": rel, "mode": "100644", "type": "blob", "sha": blob["sha"]})
-        print(f"blob: {rel} bytes={len(raw)} sha={blob['sha']}")
+        items.append({"path": remote_path, "mode": "100644", "type": "blob", "sha": blob["sha"]})
+        print(f"blob: {source_rel} -> {remote_path} bytes={len(raw)} sha={blob['sha']}")
 
     if not items:
         print("no changes to publish")
@@ -91,6 +91,15 @@ def main() -> int:
 def _gh_path() -> str:
     fixed = Path(r"C:\Program Files\GitHub CLI\gh.exe")
     return str(fixed) if fixed.exists() else "gh"
+
+
+def _parse_file_mapping(value: str) -> tuple[str, str]:
+    if "=" not in value:
+        return value, value
+    source, remote_path = value.split("=", 1)
+    if not source or not remote_path:
+        raise ValueError(f"Invalid file mapping: {value}")
+    return source, remote_path
 
 
 def _git_blob_sha(raw: bytes) -> str:

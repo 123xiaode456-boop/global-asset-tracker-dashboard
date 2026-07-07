@@ -96,7 +96,7 @@ globalThis.__api = {
 );
 
 const api = context.__api;
-assert.strictEqual(api.DATA_URL, "https://raw.githubusercontent.com/123xiaode456-boop/global-asset-tracker-dashboard/main/site-v2/data/app-data.json");
+assert.strictEqual(api.DATA_URL, "./data/app-data.json");
 const up = "上行趋势";
 const down = "下行趋势";
 const base = {
