@@ -524,7 +524,7 @@ function drawQuadrantBundle(elementId, items, title) {
       xaxis: { title: "相对强度 - 100", range: [-axis, axis], zeroline: false },
       yaxis: { title: "强度动量 - 100", range: [-axis, axis], zeroline: false, scaleanchor: "x", scaleratio: 1 },
       shapes: quadrantShapes(axis),
-      annotations: quadrantAnnotations({ color: "rgba(128, 91, 0, 0.72)", size: 14 }),
+      annotations: quadrantAnnotations({ xAxis: axis, yAxis: axis, color: "rgba(128, 91, 0, 0.38)", size: 13 }),
       showlegend: false,
     },
     { displayModeBar: false, responsive: true }
@@ -686,15 +686,24 @@ function quadrantShapesXY(xAxis, yAxis, options = {}) {
 function quadrantAnnotations(options = {}) {
   const color = options.color || "rgba(154, 103, 0, 0.74)";
   const size = options.size || 13;
-  return [
-    { text: "Improving", x: 0.06, y: 0.94 },
-    { text: "Leading", x: 0.94, y: 0.94 },
-    { text: "Lagging", x: 0.06, y: 0.06 },
-    { text: "Weakening", x: 0.94, y: 0.06 },
-  ].map((item) => ({
+  const usesDataCoordinates = Number.isFinite(options.xAxis) && Number.isFinite(options.yAxis);
+  const items = usesDataCoordinates
+    ? [
+        { text: "Improving", x: -options.xAxis * 0.58, y: options.yAxis * 0.82 },
+        { text: "Leading", x: options.xAxis * 0.58, y: options.yAxis * 0.82 },
+        { text: "Lagging", x: -options.xAxis * 0.58, y: -options.yAxis * 0.82 },
+        { text: "Weakening", x: options.xAxis * 0.58, y: -options.yAxis * 0.82 },
+      ]
+    : [
+        { text: "Improving", x: 0.06, y: 0.94 },
+        { text: "Leading", x: 0.94, y: 0.94 },
+        { text: "Lagging", x: 0.06, y: 0.06 },
+        { text: "Weakening", x: 0.94, y: 0.06 },
+      ];
+  return items.map((item) => ({
     ...item,
-    xref: "paper",
-    yref: "paper",
+    xref: usesDataCoordinates ? "x" : "paper",
+    yref: usesDataCoordinates ? "y" : "paper",
     showarrow: false,
     font: { size, color },
   }));
