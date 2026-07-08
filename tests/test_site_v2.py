@@ -10,7 +10,7 @@ NODE = Path.home() / ".cache" / "codex-runtimes" / "codex-primary-runtime" / "de
 def test_site_v2_index_cache_busts_app_script():
     html = (PROJECT_ROOT / "site-v2" / "index.html").read_text(encoding="utf-8")
 
-    assert '<script src="./app.js?v=20260707-quadrant-labels"></script>' in html
+    assert '<script src="./app.js?v=20260708-quadrant-labels-inside"></script>' in html
 
 
 def test_site_v2_frontend_rules_with_node():
@@ -328,7 +328,11 @@ assert.strictEqual(context.__plots.length, 2);
 assert.strictEqual(JSON.stringify(context.__plots.map((plot) => plot[0])), JSON.stringify(["quadrant-化工品-0", "quadrant-化工品-1"]));
 const quadrantLayout = context.__plots[0][2];
 assert.strictEqual(JSON.stringify(quadrantLayout.annotations.map((item) => item.text)), JSON.stringify(["Improving", "Leading", "Lagging", "Weakening"]));
-assert.ok(quadrantLayout.annotations.every((item) => item.font.color.includes("rgba")));
+assert.strictEqual(JSON.stringify(quadrantLayout.annotations.map((item) => item.xref)), JSON.stringify(["x", "x", "x", "x"]));
+assert.strictEqual(JSON.stringify(quadrantLayout.annotations.map((item) => item.yref)), JSON.stringify(["y", "y", "y", "y"]));
+assert.strictEqual(JSON.stringify(quadrantLayout.annotations.map((item) => item.x)), JSON.stringify([-5.8, 5.8, -5.8, 5.8]));
+assert.strictEqual(JSON.stringify(quadrantLayout.annotations.map((item) => item.y)), JSON.stringify([8.2, 8.2, -8.2, -8.2]));
+assert.ok(quadrantLayout.annotations.every((item) => item.font.color === "rgba(128, 91, 0, 0.38)"));
 assert.ok(quadrantLayout.annotations.every((item) => item.font.size >= 13));
 api.selectQuadrantGroup("贵金属");
 assert.strictEqual(api.selectedQuadrantGroup(), "贵金属");
