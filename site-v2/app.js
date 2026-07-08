@@ -396,7 +396,6 @@ function renderMonthlyTrajectories() {
               .map(
                 (item, index) => `
                   <article class="quadrant-card">
-                    <h3>${escapeHtml(item.displayName)} <code>${escapeHtml(item.assetCode)}</code></h3>
                     <div class="quadrant-chart" id="quadrant-${slug(group)}-${index}"></div>
                   </article>`
               )
@@ -407,7 +406,7 @@ function renderMonthlyTrajectories() {
   `;
 
   items.forEach((item, index) => {
-    drawQuadrantBundle(`quadrant-${slug(group)}-${index}`, [item], `${item.displayName} 一个月轨迹线`);
+    drawQuadrantBundle(`quadrant-${slug(group)}-${index}`, [item], quadrantAssetLabel(item));
   });
 }
 
@@ -518,17 +517,36 @@ function drawQuadrantBundle(elementId, items, title) {
     elementId,
     traces,
     {
-      title,
       height: 430,
-      margin: { l: 48, r: 20, t: 44, b: 44 },
+      margin: { l: 48, r: 20, t: 24, b: 44 },
       xaxis: { title: "相对强度 - 100", range: [-axis, axis], zeroline: false },
       yaxis: { title: "强度动量 - 100", range: [-axis, axis], zeroline: false, scaleanchor: "x", scaleratio: 1 },
       shapes: quadrantShapes(axis),
-      annotations: quadrantAnnotations({ xAxis: axis, yAxis: axis, color: "rgba(128, 91, 0, 0.38)", size: 13 }),
+      annotations: quadrantAnnotations({ xAxis: axis, yAxis: axis, color: "rgba(128, 91, 0, 0.38)", size: 13 }).concat(
+        chartTitleAnnotation(title)
+      ),
       showlegend: false,
     },
     { displayModeBar: false, responsive: true }
   );
+}
+
+function quadrantAssetLabel(item) {
+  return [text(item.displayName), text(item.assetCode)].filter(Boolean).join(" ");
+}
+
+function chartTitleAnnotation(title) {
+  return {
+    text: escapeHtml(title),
+    x: 0.02,
+    y: 0.98,
+    xref: "paper",
+    yref: "paper",
+    xanchor: "left",
+    yanchor: "top",
+    showarrow: false,
+    font: { size: 12, color: "rgba(31, 35, 40, 0.30)" },
+  };
 }
 
 function drawKline(elementId, bars, title) {
