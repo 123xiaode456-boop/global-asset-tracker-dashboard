@@ -10,7 +10,7 @@ NODE = Path.home() / ".cache" / "codex-runtimes" / "codex-primary-runtime" / "de
 def test_site_v2_index_cache_busts_app_script():
     html = (PROJECT_ROOT / "site-v2" / "index.html").read_text(encoding="utf-8")
 
-    assert '<script src="./app.js?v=20260708-domestic-futures-kline"></script>' in html
+    assert '<script src="./app.js?v=20260708-labels-inside"></script>' in html
 
 
 def test_site_v2_frontend_rules_with_node():
@@ -93,6 +93,9 @@ globalThis.__api = {
   renderTrendBars,
   drawKline,
   domesticCommodityRows,
+  marketSymbolForRow,
+  sinaMinuteKlineUrl,
+  normalizeSinaMinuteBars,
   priceHistory,
   toWeeklyBars,
   SEARCH_COLUMNS,
@@ -170,11 +173,26 @@ api.renderRelativeCrossSection([
 ]);
 const relativePlot = context.__plots.at(-1);
 assert.strictEqual(relativePlot[0], "relativeCrossSection");
-assert.strictEqual(JSON.stringify(relativePlot[1].map((trace) => trace.name)), JSON.stringify(["上涨", "下跌"]));
+assert.strictEqual(JSON.stringify(relativePlot[1].map((trace) => trace.name)), JSON.stringify(["上涨", "下跌", "上涨标的名称", "下跌标的名称"]));
 assert.strictEqual(JSON.stringify(relativePlot[1][0].x), JSON.stringify([3, -5]));
 assert.strictEqual(JSON.stringify(relativePlot[1][0].y), JSON.stringify([2.5, -0.8]));
 assert.strictEqual(JSON.stringify(relativePlot[1][1].x), JSON.stringify([-4, 6]));
 assert.strictEqual(JSON.stringify(relativePlot[1][1].y), JSON.stringify([1.25, -1.7]));
+assert.strictEqual(relativePlot[1][0].mode, "markers");
+assert.strictEqual(relativePlot[1][1].mode, "markers");
+assert.strictEqual(relativePlot[1][2].mode, "text");
+assert.strictEqual(relativePlot[1][3].mode, "text");
+assert.strictEqual(JSON.stringify(relativePlot[1][2].x), JSON.stringify(relativePlot[1][0].x));
+assert.strictEqual(JSON.stringify(relativePlot[1][2].y), JSON.stringify(relativePlot[1][0].y));
+assert.strictEqual(JSON.stringify(relativePlot[1][3].x), JSON.stringify(relativePlot[1][1].x));
+assert.strictEqual(JSON.stringify(relativePlot[1][3].y), JSON.stringify(relativePlot[1][1].y));
+assert.ok(relativePlot[1][2].showlegend === false && relativePlot[1][3].showlegend === false);
+assert.strictEqual(relativePlot[1][2].textposition, "middle center");
+assert.strictEqual(relativePlot[1][3].textposition, "middle center");
+assert.strictEqual(relativePlot[1][2].cliponaxis, true);
+assert.strictEqual(relativePlot[1][3].cliponaxis, true);
+assert.ok(relativePlot[1][2].textfont.color.includes("0.38"));
+assert.ok(relativePlot[1][3].textfont.color.includes("0.38"));
 assert.strictEqual(relativePlot[2].xaxis.title, "当前比价状态持续时间（左右均为正值）");
 assert.strictEqual(relativePlot[2].yaxis.title, "当前比价状态涨跌幅绝对值（上下均为正值）");
 assert.strictEqual(relativePlot[2].dragmode, "pan");
@@ -270,6 +288,7 @@ api.state.data = {
         displayName: "化工一号",
         group: "化工品",
         isDomestic: true,
+        marketSymbol: "TA0.CNFUT",
         points: [{ date: "2026-07-03", x: 1, y: 2 }],
       },
       {
@@ -278,6 +297,7 @@ api.state.data = {
         displayName: "化工二号",
         group: "化工品",
         isDomestic: true,
+        marketSymbol: "BR0.CNFUT",
         points: [{ date: "2026-07-03", x: 2, y: 3 }],
       },
       {
@@ -294,6 +314,7 @@ api.state.data = {
         displayName: "做空国内",
         group: "化工品",
         isDomestic: true,
+        marketSymbol: "RU0.CNFUT",
         points: [{ date: "2026-07-03", x: -3, y: -2 }],
       },
       {
@@ -341,6 +362,7 @@ assert.ok(!context.__elements["#longMatrix"].innerHTML.includes(">NO_SIGNAL<"));
 assert.ok(!context.__elements["#shortMatrix"].innerHTML.includes(">NO_SIGNAL<"));
 assert.strictEqual(JSON.stringify(api.domesticCommodityRows(api.filterLong(api.state.data.snapshots["core|2026-07-03"].latestRows)).map((row) => row.asset_code)), JSON.stringify(["CHEM1", "CHEM2"]));
 assert.ok(context.__elements["#longKlinePanel"].innerHTML.includes("国内商品期货行情K线"));
+assert.ok(context.__elements["#longKlinePanel"].innerHTML.includes("实时分钟K"));
 assert.ok(context.__elements["#longKlinePanel"].innerHTML.includes("化工一号"));
 assert.ok(context.__elements["#longKlinePanel"].innerHTML.includes("化工二号"));
 assert.ok(context.__elements["#longKlinePanel"].innerHTML.includes("缺行情标的"));
@@ -350,6 +372,14 @@ assert.ok(context.__elements["#shortKlinePanel"].innerHTML.includes("做空国�
 assert.ok(!context.__elements["#shortKlinePanel"].innerHTML.includes("Unmapped Short"));
 assert.ok(context.__plots.some((plot) => plot[0].startsWith("longKlinePanel-") && plot[2].title.includes("化工一号")));
 assert.ok(context.__plots.some((plot) => plot[0].startsWith("shortKlinePanel-") && plot[2].title.includes("做空国内")));
+assert.strictEqual(api.marketSymbolForRow({ asset_key: "CHEM1|Chem One", asset_code: "CHEM1" }), "TA0.CNFUT");
+assert.ok(api.sinaMinuteKlineUrl("TA0.CNFUT", "5", "testCallback").includes("var%20testCallback=/InnerFuturesNewService.getFewMinLine"));
+assert.ok(api.sinaMinuteKlineUrl("TA0.CNFUT", "5", "testCallback").includes("symbol=TA0"));
+assert.strictEqual(JSON.stringify(api.normalizeSinaMinuteBars([
+  { datetime: "2026-07-08 09:05:00", open: "10", high: "11", low: "9", close: "10.5", volume: "1200" },
+])), JSON.stringify([
+  { bar_date: "2026-07-08 09:05:00", open: 10, high: 11, low: 9, close: 10.5, volume: 1200 },
+]));
 context.__plots = [];
 api.setEarlySearch("化工一号");
 assert.strictEqual(api.state.earlySearch, "化工一号");
