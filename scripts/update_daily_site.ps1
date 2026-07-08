@@ -61,10 +61,12 @@ Push-Location $ProjectRoot
 try {
   $inputFiles = @(Resolve-InputFile -Items $Path)
   $inboxFiles = @()
+  $datasetDates = @()
 
   foreach ($file in $inputFiles) {
     $fileName = [System.IO.Path]::GetFileName($file)
     $datasetDate = Get-DatasetDate -FileName $fileName
+    $datasetDates += $datasetDate
     $inboxDir = Join-Path $ProjectRoot (Join-Path "data\inbox" $datasetDate)
     New-Item -ItemType Directory -Force -Path $inboxDir | Out-Null
     $destination = Join-Path $inboxDir $fileName
@@ -86,6 +88,23 @@ try {
   & (Join-Path $ProjectRoot "scripts\import_daily.ps1") -Path $inboxFiles -ProjectRoot $ProjectRoot
   if ($LASTEXITCODE -ne 0) {
     throw "Import failed with exit code $LASTEXITCODE"
+  }
+
+  $latestDatasetDate = @($datasetDates | Sort-Object | Select-Object -Last 1)[0]
+  $priceStartDate = ([datetime]::ParseExact($latestDatasetDate, "yyyy-MM-dd", $null)).AddDays(-400).ToString("yyyy-MM-dd")
+  $db = Join-Path $ProjectRoot "data\processed\signals.sqlite"
+  $fetchArgs = @(
+    "-m", "asset_tracker",
+    "fetch-prices",
+    "--db", $db,
+    "--dataset-type", "core",
+    "--asset-kind", "domestic-futures",
+    "--missing-only",
+    "--start", $priceStartDate
+  )
+  & $py @fetchArgs
+  if ($LASTEXITCODE -ne 0) {
+    throw "Price fetch failed with exit code $LASTEXITCODE"
   }
 
   & $py (Join-Path $ProjectRoot "src\export_static_site.py") --site-dir (Join-Path $ProjectRoot "site-v2") --commodity-only

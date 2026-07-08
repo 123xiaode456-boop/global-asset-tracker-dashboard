@@ -10,6 +10,7 @@ from typing import Any
 from asset_tracker.cli import DEFAULT_DB
 from asset_tracker.dashboard_data import load_dashboard_snapshot
 from asset_tracker.database import AssetDatabase
+from asset_tracker.domestic_futures import domestic_futures_symbol, is_domestic_commodity_future
 from asset_tracker.futures_quadrant import load_futures_commodity_trajectories
 
 
@@ -58,13 +59,7 @@ def build_static_payload(db_path: str | Path, commodity_only: bool = False) -> d
     for dataset_date in dates_by_type.get("core", []):
         trajectories = load_futures_commodity_trajectories(db_path, dataset_date=dataset_date, dataset_type="core")
         futures_by_date[dataset_date] = [
-            {
-                "assetKey": item.asset_key,
-                "assetCode": item.asset_code,
-                "displayName": item.display_name,
-                "group": item.group,
-                "points": [asdict(point) for point in item.points],
-            }
+            _futures_item_payload(item)
             for item in trajectories
         ]
 
@@ -95,6 +90,21 @@ def _snapshot_payload(snapshot) -> dict[str, Any]:
         "riskWatch": snapshot.risk_watch,
         "longOpportunities": snapshot.long_opportunities,
         "shortOpportunities": snapshot.short_opportunities,
+    }
+
+
+def _futures_item_payload(item) -> dict[str, Any]:
+    row = {"asset_code": item.asset_code, "asset_name_cn": item.display_name, "asset_name": item.display_name}
+    symbol = domestic_futures_symbol(row)
+    return {
+        "assetKey": item.asset_key,
+        "assetCode": item.asset_code,
+        "displayName": item.display_name,
+        "group": item.group,
+        "isDomestic": is_domestic_commodity_future(row),
+        "marketSymbol": symbol,
+        "marketSource": "akshare" if symbol else None,
+        "points": [asdict(point) for point in item.points],
     }
 
 

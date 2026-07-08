@@ -84,10 +84,34 @@ def test_static_export_can_build_core_payload_with_full_signal_rows_and_commodit
     assert "SPY|SPDR S&P 500 ETF Trust" not in payload["priceHistories"]
 
 
-def _sample_row(asset_code: str, asset_name: str) -> dict:
+def test_static_export_marks_domestic_futures_in_futures_by_date(tmp_path):
+    db = AssetDatabase(tmp_path / "signals.sqlite")
+    db.initialize()
+    parsed = ParsedDataset(
+        metadata=DatasetMetadata(date(2026, 7, 3), "core"),
+        source_path=Path("sample.xlsx"),
+        source_hash="domestic-futures-export-hash",
+        rows=[
+            _sample_row("TA1!", "PTA Futures", "PTA\u671f\u8d27"),
+            _sample_row("RB1!", "RBOB Gasoline Futures", "RBOB汽油期货"),
+        ],
+    )
+    db.import_parsed_dataset(parsed, parsed.source_path)
+
+    payload = build_static_payload(db.path, commodity_only=True)
+    items = payload["futuresByDate"]["2026-07-03"]
+
+    assert {item["assetCode"]: item["isDomestic"] for item in items} == {
+        "TA1!": True,
+        "RB1!": False,
+    }
+
+
+def _sample_row(asset_code: str, asset_name: str, asset_name_cn: str = "") -> dict:
     return {
         "asset_code": asset_code,
         "asset_name": asset_name,
+        "asset_name_cn": asset_name_cn,
         "day_trend": "上行趋势",
         "day_trend_duration": 2,
         "week_trend": "上行趋势",

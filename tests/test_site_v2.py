@@ -10,7 +10,7 @@ NODE = Path.home() / ".cache" / "codex-runtimes" / "codex-primary-runtime" / "de
 def test_site_v2_index_cache_busts_app_script():
     html = (PROJECT_ROOT / "site-v2" / "index.html").read_text(encoding="utf-8")
 
-    assert '<script src="./app.js?v=20260708-asset-labels-inside-plot"></script>' in html
+    assert '<script src="./app.js?v=20260708-domestic-futures-kline"></script>' in html
 
 
 def test_site_v2_frontend_rules_with_node():
@@ -92,6 +92,7 @@ globalThis.__api = {
   selectTrendGroup,
   renderTrendBars,
   drawKline,
+  domesticCommodityRows,
   priceHistory,
   toWeeklyBars,
   SEARCH_COLUMNS,
@@ -247,7 +248,9 @@ api.state.data = {
           latestDate: "2026-07-03",
           latestRows: [
         { asset_key: "CHEM1|Chem One", asset_code: "CHEM1", asset_name_cn: "化工一号", asset_name: "Chem One", relative_state: "lead", relative_state_duration: 3, relative_state_return: 2.5, capital_state: "加杠杆", day_trend: up, day_trend_duration: 3, week_trend: up, week_trend_duration: 4, month_trend: up, month_trend_duration: 5 },
-        { asset_key: "CHEM2|Chem Two", asset_code: "CHEM2", day_trend: down, day_trend_duration: 6, week_trend: down, week_trend_duration: 7, month_trend: down, month_trend_duration: 8 },
+        { asset_key: "CHEM2|Chem Two", asset_code: "CHEM2", asset_name_cn: "化工二号", asset_name: "Chem Two", relative_state: "lead", relative_state_duration: 5, relative_state_return: 1.5, capital_state: "加杠杆", day_trend: up, day_trend_duration: 6, week_trend: up, week_trend_duration: 7, month_trend: down, month_trend_duration: 8 },
+        { asset_key: "FOREIGN1|Foreign", asset_code: "FOREIGN1", asset_name_cn: "海外原油", asset_name: "Foreign", relative_state: "lead", relative_state_duration: 4, relative_state_return: 1.2, capital_state: "加杠杆", day_trend: up, day_trend_duration: 5, week_trend: up, week_trend_duration: 6, month_trend: up, month_trend_duration: 7 },
+        { asset_key: "SHORTDOM|Short Domestic", asset_code: "SHORTDOM", asset_name_cn: "做空国内", asset_name: "Short Domestic", relative_state: "lag", relative_state_duration: 2, relative_state_return: -1.1, capital_state: "去杠杆", day_trend: down, day_trend_duration: 2, week_trend: down, week_trend_duration: 3, month_trend: up, month_trend_duration: 4 },
         { asset_key: "GOLD1|Gold", asset_code: "GOLD1", day_trend: up, day_trend_duration: 9, week_trend: up, week_trend_duration: 10, month_trend: up, month_trend_duration: 11 },
         { asset_key: "UNMAPPED_LONG|Long", asset_code: "UNMAPPED_LONG", asset_name: "Unmapped Long", relative_state: "improving", capital_state: "加杠杆", day_trend: up, day_trend_duration: 2, week_trend: up, week_trend_duration: 3, month_trend: down, month_trend_duration: 4 },
         { asset_key: "UNMAPPED_SHORT|Short", asset_code: "UNMAPPED_SHORT", asset_name: "Unmapped Short", relative_state: "lag", capital_state: "去杠杆", day_trend: down, day_trend_duration: 2, week_trend: down, week_trend_duration: 3, month_trend: up, month_trend_duration: 4 },
@@ -266,6 +269,7 @@ api.state.data = {
         assetCode: "CHEM1",
         displayName: "化工一号",
         group: "化工品",
+        isDomestic: true,
         points: [{ date: "2026-07-03", x: 1, y: 2 }],
       },
       {
@@ -273,15 +277,46 @@ api.state.data = {
         assetCode: "CHEM2",
         displayName: "化工二号",
         group: "化工品",
+        isDomestic: true,
         points: [{ date: "2026-07-03", x: 2, y: 3 }],
+      },
+      {
+        assetKey: "FOREIGN1|Foreign",
+        assetCode: "FOREIGN1",
+        displayName: "海外原油",
+        group: "化工品",
+        isDomestic: false,
+        points: [{ date: "2026-07-03", x: 3, y: 2 }],
+      },
+      {
+        assetKey: "SHORTDOM|Short Domestic",
+        assetCode: "SHORTDOM",
+        displayName: "做空国内",
+        group: "化工品",
+        isDomestic: true,
+        points: [{ date: "2026-07-03", x: -3, y: -2 }],
       },
       {
         assetKey: "GOLD1|Gold",
         assetCode: "GOLD1",
         displayName: "黄金",
         group: "贵金属",
+        isDomestic: true,
         points: [{ date: "2026-07-03", x: 4, y: 5 }],
       },
+    ],
+  },
+  priceHistories: {
+    "CHEM1|Chem One": [
+      { bar_date: "2026-07-01", open: 10, high: 11, low: 9, close: 10.5, volume: 100 },
+      { bar_date: "2026-07-02", open: 10.5, high: 12, low: 10, close: 11.5, volume: 120 },
+    ],
+    "FOREIGN1|Foreign": [
+      { bar_date: "2026-07-01", open: 20, high: 22, low: 19, close: 21, volume: 100 },
+    ],
+    "SHORTDOM|Short Domestic": [
+      { bar_date: "2026-07-01", open: 30, high: 31, low: 28, close: 29, volume: 110 },
+      { bar_date: "2026-07-02", open: 29, high: 30, low: 27, close: 28, volume: 130 },
     ],
   },
 };
@@ -297,15 +332,29 @@ api.state.search = "";
 context.__plots = [];
 api.render();
 assert.ok(context.__elements["#longMatrix"].innerHTML.includes(">CHEM1<"));
+assert.ok(context.__elements["#longMatrix"].innerHTML.includes(">CHEM2<"));
+assert.ok(context.__elements["#longMatrix"].innerHTML.includes(">FOREIGN1<"));
 assert.ok(context.__elements["#longMatrix"].innerHTML.includes(">UNMAPPED_LONG<"));
+assert.ok(context.__elements["#shortMatrix"].innerHTML.includes(">SHORTDOM<"));
 assert.ok(context.__elements["#shortMatrix"].innerHTML.includes(">UNMAPPED_SHORT<"));
 assert.ok(!context.__elements["#longMatrix"].innerHTML.includes(">NO_SIGNAL<"));
 assert.ok(!context.__elements["#shortMatrix"].innerHTML.includes(">NO_SIGNAL<"));
+assert.strictEqual(JSON.stringify(api.domesticCommodityRows(api.filterLong(api.state.data.snapshots["core|2026-07-03"].latestRows)).map((row) => row.asset_code)), JSON.stringify(["CHEM1", "CHEM2"]));
+assert.ok(context.__elements["#longKlinePanel"].innerHTML.includes("国内商品期货行情K线"));
+assert.ok(context.__elements["#longKlinePanel"].innerHTML.includes("化工一号"));
+assert.ok(context.__elements["#longKlinePanel"].innerHTML.includes("化工二号"));
+assert.ok(context.__elements["#longKlinePanel"].innerHTML.includes("缺行情标的"));
+assert.ok(!context.__elements["#longKlinePanel"].innerHTML.includes("海外原油"));
+assert.ok(!context.__elements["#longKlinePanel"].innerHTML.includes("Unmapped Long"));
+assert.ok(context.__elements["#shortKlinePanel"].innerHTML.includes("做空国内"));
+assert.ok(!context.__elements["#shortKlinePanel"].innerHTML.includes("Unmapped Short"));
+assert.ok(context.__plots.some((plot) => plot[0].startsWith("longKlinePanel-") && plot[2].title.includes("化工一号")));
+assert.ok(context.__plots.some((plot) => plot[0].startsWith("shortKlinePanel-") && plot[2].title.includes("做空国内")));
 context.__plots = [];
 api.setEarlySearch("化工一号");
 assert.strictEqual(api.state.earlySearch, "化工一号");
 assert.strictEqual(context.__elements["#earlyAssetSearch"].value, "化工一号");
-assert.ok(context.__elements["#earlySearchStatus"].textContent.includes("1 / 3"));
+assert.ok(context.__elements["#earlySearchStatus"].textContent.includes("1 / 5"));
 const searchedEarlyPlot = context.__plots.at(-1);
 assert.strictEqual(JSON.stringify(searchedEarlyPlot[1][0].x), JSON.stringify([3]));
 assert.strictEqual(JSON.stringify(searchedEarlyPlot[1][0].text), JSON.stringify(["化工一号"]));
@@ -313,17 +362,17 @@ context.__plots = [];
 api.resetEarlySearch();
 assert.strictEqual(api.state.earlySearch, "");
 assert.strictEqual(context.__elements["#earlyAssetSearch"].value, "");
-assert.ok(context.__elements["#earlySearchStatus"].textContent.includes("3 / 3"));
+assert.ok(context.__elements["#earlySearchStatus"].textContent.includes("5 / 5"));
 const resetEarlyPlot = context.__plots.at(-1);
-assert.strictEqual(resetEarlyPlot[1][0].x.length + resetEarlyPlot[1][1].x.length, 1);
+assert.strictEqual(resetEarlyPlot[1][0].x.length + resetEarlyPlot[1][1].x.length, 4);
 context.__plots = [];
 api.renderMonthlyTrajectories();
 assert.strictEqual(api.selectedQuadrantGroup(), "化工品");
 assert.ok(context.__elements["#monthlyTrajectories"].innerHTML.includes("quadrant-tabs"));
 assert.ok(context.__elements["#monthlyTrajectories"].innerHTML.includes("quadrant-grid"));
 assert.ok(!context.__elements["#monthlyTrajectories"].innerHTML.includes("黄金"));
-assert.strictEqual(context.__plots.length, 2);
-assert.strictEqual(JSON.stringify(context.__plots.map((plot) => plot[0])), JSON.stringify(["quadrant-化工品-0", "quadrant-化工品-1"]));
+assert.strictEqual(context.__plots.length, 4);
+assert.strictEqual(JSON.stringify(context.__plots.map((plot) => plot[0])), JSON.stringify(["quadrant-化工品-0", "quadrant-化工品-1", "quadrant-化工品-2", "quadrant-化工品-3"]));
 const quadrantLayout = context.__plots[0][2];
 const quadrantLabels = quadrantLayout.annotations.slice(0, 4);
 assert.strictEqual(JSON.stringify(quadrantLabels.map((item) => item.text)), JSON.stringify(["Improving", "Leading", "Lagging", "Weakening"]));
@@ -355,8 +404,8 @@ assert.ok(context.__elements["#trendBars"].innerHTML.includes("trend-grid"));
 assert.ok(context.__elements["#trendBars"].innerHTML.includes("化工一号"));
 assert.ok(context.__elements["#trendBars"].innerHTML.includes("化工二号"));
 assert.ok(!context.__elements["#trendBars"].innerHTML.includes("黄金"));
-assert.strictEqual(context.__plots.length, 2);
-assert.strictEqual(JSON.stringify(context.__plots.map((plot) => plot[0])), JSON.stringify(["trend-化工品-0", "trend-化工品-1"]));
+assert.strictEqual(context.__plots.length, 4);
+assert.strictEqual(JSON.stringify(context.__plots.map((plot) => plot[0])), JSON.stringify(["trend-化工品-0", "trend-化工品-1", "trend-化工品-2", "trend-化工品-3"]));
 assert.strictEqual(JSON.stringify(context.__plots[0][1].map((trace) => trace.name)), JSON.stringify(["日K", "周K", "月K"]));
 assert.strictEqual(JSON.stringify(context.__plots[0][1][0].y), JSON.stringify([1, -2, 3]));
 api.selectTrendGroup("贵金属");

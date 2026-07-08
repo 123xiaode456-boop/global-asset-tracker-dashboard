@@ -9,6 +9,7 @@ import plotly.graph_objects as go
 from .analysis import QuadrantPoint, build_quadrant_trajectory
 from .asset_names import display_asset_name
 from .database import AssetDatabase
+from .domestic_futures import domestic_futures_group
 
 
 REQUESTED_GROUPS = ("化工品", "农产品", "有色", "贵金属")
@@ -118,6 +119,9 @@ def classify_futures_group(row: dict[str, Any]) -> str | None:
     for name, group in FUTURES_GROUP_BY_NAME.items():
         if name and name in original:
             return group
+    group = domestic_futures_group(row)
+    if group:
+        return group
     return None
 
 

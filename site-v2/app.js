@@ -180,6 +180,29 @@ function commodityAssetIdentifiersForCurrentDate() {
   };
 }
 
+function domesticCommodityRows(rows) {
+  const { keys, codes } = domesticCommodityAssetIdentifiersForCurrentDate();
+  if (!keys.size && !codes.size) return [];
+  return rows.filter((row) => {
+    const key = text(row.asset_key);
+    if (key) return keys.has(key);
+    return codes.has(text(row.asset_code));
+  });
+}
+
+function domesticCommodityAssetIdentifiersForCurrentDate() {
+  const items = state.data?.futuresByDate?.[state.date] || [];
+  const filtered = items.filter((item) => REQUIRED_FUTURES_GROUPS.includes(item.group) && isDomesticFuturesItem(item));
+  return {
+    keys: new Set(filtered.map((item) => text(item.assetKey)).filter(Boolean)),
+    codes: new Set(filtered.map((item) => text(item.assetCode)).filter(Boolean)),
+  };
+}
+
+function isDomesticFuturesItem(item) {
+  return item.isDomestic === true || text(item.market).toUpperCase() === "CN" || text(item.marketSource).toLowerCase() === "akshare";
+}
+
 function renderBarAlerts(rows) {
   const alertRows = barAlertRows(rows).map((row) => ({ ...row, alert_reason: barOneReasons(row).join(" / ") }));
   const columns = [
@@ -258,14 +281,18 @@ function renderKlinePanel(selector, rows) {
     container.innerHTML = `<div class="empty">当前日期无符合条件标的。</div>`;
     return;
   }
-  const withPrice = rows.filter((row) => priceHistory(row).length);
-  const missing = rows.filter((row) => !priceHistory(row).length);
+  const domesticRows = domesticCommodityRows(rows);
+  if (!domesticRows.length) {
+    container.innerHTML = `<div class="empty">筛选结果中暂无国内商品期货标的。</div>`;
+    return;
+  }
+  const withPrice = domesticRows.filter((row) => priceHistory(row).length);
+  const missing = domesticRows.filter((row) => !priceHistory(row).length);
   container.innerHTML = `
-    <div class="kline-summary">有行情：${withPrice.length} 个；缺行情：${missing.length} 个。</div>
+    <div class="kline-summary">国内商品期货行情K线：有行情：${withPrice.length} 个；缺行情：${missing.length} 个。</div>
     ${missing.length ? `<details class="missing" open><summary>缺行情标的</summary>${missing.map((row) => `<span class="pill">${displayName(row)} <code>${escapeHtml(row.asset_code)}</code></span>`).join("")}</details>` : ""}
     <div class="kline-grid">
       ${withPrice
-        .slice(0, 24)
         .map(
           (row, index) => `
           <article class="kline-card">
@@ -276,10 +303,9 @@ function renderKlinePanel(selector, rows) {
         )
         .join("")}
     </div>
-    ${withPrice.length > 24 ? `<p class="hint">为控制页面性能，当前只展示前 24 个有行情候选的 K 线图。</p>` : ""}
   `;
   requestAnimationFrame(() => {
-    withPrice.slice(0, 24).forEach((row, index) => {
+    withPrice.forEach((row, index) => {
       const daily = priceHistory(row);
       drawKline(chartDomId(selector, row, index, "daily"), daily, `${displayName(row)} 日K`);
       drawKline(chartDomId(selector, row, index, "weekly"), toWeeklyBars(daily), `${displayName(row)} 周K`);

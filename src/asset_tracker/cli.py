@@ -10,6 +10,7 @@ from pathlib import Path
 
 from .database import AssetDatabase, ImportResult, asset_identifiers_match, make_asset_key
 from .market_data import fetch_price_history, guess_symbol_candidates
+from .domestic_futures import is_domestic_commodity_future
 from .parsers import ParsedDataset, parse_dataset_file
 from .reports import write_markdown_report
 from .rules import summarize_rows
@@ -279,7 +280,7 @@ def main(argv: list[str] | None = None) -> int:
     price_parser.add_argument("--dataset-type", choices=["core", "betting"], help="Limit to one dataset type.")
     price_parser.add_argument(
         "--asset-kind",
-        choices=["us-like", "us-etf", "six-digit", "futures", "no-candidate"],
+        choices=["us-like", "us-etf", "six-digit", "futures", "domestic-futures", "no-candidate"],
         help="Limit fetches to one asset code family.",
     )
     price_parser.add_argument("--start", help="Start date, YYYY-MM-DD.")
@@ -591,6 +592,8 @@ def _matches_asset_kind(row: dict, asset_kind: str) -> bool:
         return code.isdigit() and len(code) == 6
     if asset_kind == "futures":
         return "!" in code
+    if asset_kind == "domestic-futures":
+        return is_domestic_commodity_future(row)
     if asset_kind == "no-candidate":
         return not candidates
     return True

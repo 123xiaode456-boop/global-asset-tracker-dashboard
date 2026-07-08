@@ -7,6 +7,7 @@ from asset_tracker.futures_quadrant import (
     futures_quadrant_figure,
     load_futures_commodity_trajectories,
 )
+from asset_tracker.domestic_futures import domestic_futures_symbol, is_domestic_commodity_future
 from asset_tracker.futures_quadrant_page import render_futures_trajectory_grid
 from asset_tracker.parsers import DatasetMetadata, ParsedDataset
 
@@ -19,6 +20,13 @@ def test_classify_futures_group_handles_requested_commodity_groups_and_duplicate
     assert classify_futures_group({"asset_code": "PL1!", "asset_name_cn": "丙烯期货", "asset_name": "Propylene Futures"}) == "化工品"
     assert classify_futures_group({"asset_code": "PL1!", "asset_name_cn": "铂金期货", "asset_name": "Platinum Futures"}) == "贵金属"
     assert classify_futures_group({"asset_code": "ZN1!", "asset_name_cn": "10年期美债期货", "asset_name": "10-Year T-Note Futures"}) is None
+
+
+def test_domestic_futures_detection_uses_chinese_contract_name_not_code_only():
+    assert is_domestic_commodity_future({"asset_code": "TA1!", "asset_name_cn": "PTA期货"}) is True
+    assert domestic_futures_symbol({"asset_code": "TA1!", "asset_name_cn": "PTA期货"}) == "TA0.CNFUT"
+    assert is_domestic_commodity_future({"asset_code": "RB1!", "asset_name_cn": "RBOB汽油期货"}) is False
+    assert domestic_futures_symbol({"asset_code": "RB1!", "asset_name_cn": "RBOB汽油期货"}) is None
 
 
 def test_load_futures_commodity_trajectories_returns_daily_paths(tmp_path):

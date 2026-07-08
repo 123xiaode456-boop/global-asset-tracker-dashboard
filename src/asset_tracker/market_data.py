@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import date
 from typing import Any
 
+from .domestic_futures import domestic_futures_symbol
+
 
 def guess_symbol_candidates(row: dict[str, Any]) -> list[str]:
     code = str(row.get("asset_code", "")).strip()
@@ -12,6 +14,9 @@ def guess_symbol_candidates(row: dict[str, Any]) -> list[str]:
     forex_symbol = _forex_symbol(code, asset_name)
     if forex_symbol:
         return [forex_symbol]
+    domestic_symbol = domestic_futures_symbol(row)
+    if domestic_symbol:
+        return [domestic_symbol]
     if "!" in code:
         futures_symbol = _continuous_futures_symbol(code)
         return [futures_symbol] if futures_symbol else []
@@ -68,6 +73,8 @@ def fetch_price_history(
     symbol = market_symbol or (guess_symbol_candidates(row)[0] if guess_symbol_candidates(row) else None)
     if not symbol:
         return []
+    if symbol.endswith(".CNFUT"):
+        return _fetch_akshare_cn_futures_daily(symbol, start, end)
     if symbol.endswith((".SZ", ".SS")):
         return _fetch_akshare_daily(symbol, start, end)
     if symbol.endswith(".HK"):
@@ -205,6 +212,25 @@ def _fetch_akshare_us_daily(
             }
         )
     return rows
+
+
+def _fetch_akshare_cn_futures_daily(
+    symbol: str,
+    start: date | str | None,
+    end: date | str | None,
+) -> list[dict[str, Any]]:
+    try:
+        import akshare as ak
+    except ImportError:
+        return []
+    code = symbol.split(".", 1)[0]
+    try:
+        frame = ak.futures_zh_daily_sina(symbol=code)
+    except Exception:
+        return []
+    if frame.empty:
+        return []
+    return _daily_rows_from_frame(frame, start=start, end=end)
 
 
 def _ak_date(value: date | str | None) -> str:

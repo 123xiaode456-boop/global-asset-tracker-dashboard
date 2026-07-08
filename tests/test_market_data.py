@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 
 from asset_tracker.market_data import build_symbol_mapping_queue, fetch_price_history, guess_symbol_candidates
+from asset_tracker.cli import _matches_asset_kind
 
 
 def test_guess_symbol_candidates_handles_common_markets():
@@ -36,6 +37,16 @@ def test_guess_symbol_candidates_handles_common_continuous_futures():
     assert guess_symbol_candidates({"asset_code": "GC1!", "asset_name": "Gold Futures"}) == ["GC=F"]
     assert guess_symbol_candidates({"asset_code": "CL1!", "asset_name": "Crude Oil Futures"}) == ["CL=F"]
     assert guess_symbol_candidates({"asset_code": "ZN1!", "asset_name": "10-Year T-Note Futures"}) == ["ZN=F"]
+
+
+def test_guess_symbol_candidates_handles_domestic_futures_before_overseas_code_mapping():
+    assert guess_symbol_candidates({"asset_code": "TA1!", "asset_name_cn": "PTA期货", "asset_name": "PTA Futures"}) == ["TA0.CNFUT"]
+    assert guess_symbol_candidates({"asset_code": "RB1!", "asset_name_cn": "RBOB汽油期货", "asset_name": "RBOB Gasoline Futures"}) == ["RB=F"]
+
+
+def test_asset_kind_domestic_futures_matches_only_domestic_contracts():
+    assert _matches_asset_kind({"asset_code": "TA1!", "asset_name_cn": "PTA期货", "asset_name": "PTA Futures"}, "domestic-futures") is True
+    assert _matches_asset_kind({"asset_code": "RB1!", "asset_name_cn": "RBOB汽油期货", "asset_name": "RBOB Gasoline Futures"}, "domestic-futures") is False
 
 
 def test_unmapped_queue_keeps_assets_without_free_source_mapping():
@@ -87,6 +98,39 @@ def test_fetch_price_history_surfaces_akshare_daily_errors(monkeypatch):
             end="2026-06-21",
             market_symbol="159919.SZ",
         )
+
+
+def test_fetch_price_history_uses_akshare_for_domestic_futures(monkeypatch):
+    calls = []
+
+    def fake_futures_zh_daily_sina(symbol):
+        calls.append(symbol)
+        return pd.DataFrame(
+            [
+                {"date": "2026-06-18", "open": 100.0, "high": 103.0, "low": 99.0, "close": 102.0, "volume": 123456},
+                {"date": "2026-06-19", "open": 102.0, "high": 104.0, "low": 101.0, "close": 103.0, "volume": 123457},
+            ]
+        )
+
+    monkeypatch.setitem(sys.modules, "akshare", SimpleNamespace(futures_zh_daily_sina=fake_futures_zh_daily_sina))
+
+    rows = fetch_price_history(
+        {"asset_code": "TA1!", "asset_name_cn": "PTA期货", "asset_name": "PTA Futures"},
+        start="2026-06-19",
+        end="2026-06-21",
+    )
+
+    assert calls == ["TA0"]
+    assert rows == [
+        {
+            "bar_date": "2026-06-19",
+            "open": 102.0,
+            "high": 104.0,
+            "low": 101.0,
+            "close": 103.0,
+            "volume": 123457.0,
+        }
+    ]
 
 
 def test_fetch_price_history_uses_akshare_for_hk_symbols(monkeypatch):
