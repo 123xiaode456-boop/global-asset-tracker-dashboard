@@ -289,26 +289,35 @@ function renderKlinePanel(selector, rows) {
   const withPrice = domesticRows.filter((row) => priceHistory(row).length);
   const missing = domesticRows.filter((row) => !priceHistory(row).length);
   container.innerHTML = `
-    <div class="kline-summary">国内商品期货行情K线：有行情：${withPrice.length} 个；缺行情：${missing.length} 个。</div>
+    <div class="kline-summary">国内商品期货行情K线：有缓存日K：${withPrice.length} 个；缺缓存日K：${missing.length} 个；每个品种同时尝试加载实时分钟K。</div>
     ${missing.length ? `<details class="missing" open><summary>缺行情标的</summary>${missing.map((row) => `<span class="pill">${displayName(row)} <code>${escapeHtml(row.asset_code)}</code></span>`).join("")}</details>` : ""}
     <div class="kline-grid">
-      ${withPrice
+      ${domesticRows
         .map(
           (row, index) => `
           <article class="kline-card">
             <h3>${displayName(row)} <code>${escapeHtml(row.asset_code)}</code></h3>
             <div class="kline-chart" id="${chartDomId(selector, row, index, "daily")}"></div>
             <div class="kline-chart" id="${chartDomId(selector, row, index, "weekly")}"></div>
+            <div class="kline-chart" id="${chartDomId(selector, row, index, "live")}"></div>
           </article>`
         )
         .join("")}
     </div>
   `;
   requestAnimationFrame(() => {
-    withPrice.forEach((row, index) => {
+    domesticRows.forEach((row, index) => {
       const daily = priceHistory(row);
-      drawKline(chartDomId(selector, row, index, "daily"), daily, `${displayName(row)} 日K`);
-      drawKline(chartDomId(selector, row, index, "weekly"), toWeeklyBars(daily), `${displayName(row)} 周K`);
+      const dailyId = chartDomId(selector, row, index, "daily");
+      const weeklyId = chartDomId(selector, row, index, "weekly");
+      if (daily.length) {
+        drawKline(dailyId, daily, `${displayName(row)} 日K`);
+        drawKline(weeklyId, toWeeklyBars(daily), `${displayName(row)} 周K`);
+      } else {
+        setChartMessage(dailyId, "暂无缓存日K");
+        setChartMessage(weeklyId, "暂无缓存周K");
+      }
+      drawLiveMinuteKline(chartDomId(selector, row, index, "live"), row);
     });
   });
 }
@@ -352,30 +361,43 @@ function renderEarlySearchStatus(totalCount, filteredCount) {
 
 function renderRelativeCrossSection(rows) {
   const points = rows.map((row) => ({ row, point: relativeStatePoint(row) })).filter((item) => item.point);
-  const traces = ["up", "down"].map((direction) => {
+  const markerTraces = ["up", "down"].map((direction) => {
     const directionPoints = points.filter((item) => item.point.direction === direction);
     const config = RETURN_DIRECTIONS[direction];
     return {
-    name: config.name,
-    type: "scatter",
-    mode: "markers+text",
-    x: directionPoints.map((item) => item.point.x),
-    y: directionPoints.map((item) => item.point.y),
-    text: directionPoints.map((item) => displayName(item.row)),
-    textposition: "top center",
-    marker: { size: 8, color: config.color, opacity: 0.82, line: { width: 1, color: "#202020" } },
-    customdata: directionPoints.map((item) => [
-      item.row.asset_code,
-      text(item.row.relative_state),
-      item.point.quadrant,
-      item.point.duration,
-      item.point.returnValue,
-      config.name,
-    ]),
-    hovertemplate:
-      "标的=%{text}<br>代码=%{customdata[0]}<br>比价状态=%{customdata[1]}<br>象限=%{customdata[2]}<br>持续时间=%{customdata[3]}<br>涨跌幅=%{customdata[4]:.2f}<br>方向=%{customdata[5]}<extra></extra>",
-  };
+      name: config.name,
+      type: "scatter",
+      mode: "markers",
+      x: directionPoints.map((item) => item.point.x),
+      y: directionPoints.map((item) => item.point.y),
+      text: directionPoints.map((item) => displayName(item.row)),
+      marker: { size: 8, color: config.color, opacity: 0.82, line: { width: 1, color: "#202020" } },
+      customdata: directionPoints.map((item) => [
+        item.row.asset_code,
+        text(item.row.relative_state),
+        item.point.quadrant,
+        item.point.duration,
+        item.point.returnValue,
+        config.name,
+      ]),
+      hovertemplate:
+        "标的=%{text}<br>代码=%{customdata[0]}<br>比价状态=%{customdata[1]}<br>象限=%{customdata[2]}<br>持续时间=%{customdata[3]}<br>涨跌幅=%{customdata[4]:.2f}<br>方向=%{customdata[5]}<extra></extra>",
+    };
   });
+  const labelTraces = markerTraces.map((trace) => ({
+    name: `${trace.name}标的名称`,
+    type: "scatter",
+    mode: "text",
+    x: trace.x,
+    y: trace.y,
+    text: trace.text,
+    textposition: "middle center",
+    textfont: { size: 10, color: "rgba(31, 35, 40, 0.38)" },
+    cliponaxis: true,
+    hoverinfo: "skip",
+    showlegend: false,
+  }));
+  const traces = markerTraces.concat(labelTraces);
   const xAxis = mirroredAxis(points.map((item) => Math.abs(item.point.x)), 1);
   const yAxis = mirroredAxis(points.map((item) => Math.abs(item.point.y)), 1);
   Plotly.newPlot(
@@ -655,6 +677,81 @@ function weekKey(dateText) {
 function priceHistory(row) {
   const histories = state.data.priceHistories || {};
   return histories[row.asset_key] || histories[`${row.asset_code}|${row.asset_name}`] || histories[row.asset_code] || [];
+}
+
+function marketSymbolForRow(row) {
+  const meta = domesticFuturesMetaForRow(row);
+  return text(meta?.marketSymbol);
+}
+
+function domesticFuturesMetaForRow(row) {
+  const items = state.data?.futuresByDate?.[state.date] || [];
+  const key = text(row.asset_key);
+  const code = text(row.asset_code);
+  return items.find((item) => (key && text(item.assetKey) === key) || (code && text(item.assetCode) === code)) || null;
+}
+
+function drawLiveMinuteKline(elementId, row) {
+  const marketSymbol = marketSymbolForRow(row);
+  if (!marketSymbol) {
+    setChartMessage(elementId, "暂无实时分钟K映射");
+    return;
+  }
+  setChartMessage(elementId, "实时分钟K加载中...");
+  loadSinaMinuteBars(marketSymbol, "5")
+    .then((bars) => {
+      if (!bars.length) {
+        setChartMessage(elementId, "暂无实时分钟K数据");
+        return;
+      }
+      drawKline(elementId, bars.slice(-240), `${displayName(row)} 实时分钟K`);
+    })
+    .catch(() => setChartMessage(elementId, "实时分钟K加载失败"));
+}
+
+function loadSinaMinuteBars(marketSymbol, period = "5") {
+  if (typeof document.createElement !== "function" || !document.head) return Promise.resolve([]);
+  const callback = `sinaKline${Date.now()}${Math.floor(Math.random() * 100000)}`;
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = sinaMinuteKlineUrl(marketSymbol, period, callback);
+    script.async = true;
+    script.onload = () => {
+      const rows = globalThis[callback] || [];
+      delete globalThis[callback];
+      script.remove();
+      resolve(normalizeSinaMinuteBars(rows));
+    };
+    script.onerror = () => {
+      delete globalThis[callback];
+      script.remove();
+      reject(new Error("sina minute kline load failed"));
+    };
+    document.head.appendChild(script);
+  });
+}
+
+function sinaMinuteKlineUrl(marketSymbol, period = "5", callback = "callback") {
+  const symbol = text(marketSymbol).replace(".CNFUT", "").split(".", 1)[0];
+  return `https://stock2.finance.sina.com.cn/futures/api/jsonp.php/var%20${encodeURIComponent(callback)}=/InnerFuturesNewService.getFewMinLine?symbol=${encodeURIComponent(symbol)}&type=${encodeURIComponent(period)}`;
+}
+
+function normalizeSinaMinuteBars(rows) {
+  return (Array.isArray(rows) ? rows : [])
+    .map((row) => ({
+      bar_date: text(row.datetime || row.date),
+      open: optionalNumber(row.open),
+      high: optionalNumber(row.high),
+      low: optionalNumber(row.low),
+      close: optionalNumber(row.close),
+      volume: optionalNumber(row.volume),
+    }))
+    .filter((row) => row.bar_date && row.open !== null && row.high !== null && row.low !== null && row.close !== null);
+}
+
+function setChartMessage(elementId, message) {
+  const target = document.querySelector(`#${elementId}`);
+  if (target) target.innerHTML = `<div class="empty chart-empty">${escapeHtml(message)}</div>`;
 }
 
 function chartDomId(selector, row, index, suffix) {
