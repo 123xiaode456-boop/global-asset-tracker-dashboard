@@ -9,6 +9,8 @@ const state = {
   trendGroup: "化工品",
   search: "",
   earlySearch: "",
+  momentumSearch: "",
+  momentumState: "all",
 };
 
 const GROUP_COLORS = {
@@ -16,10 +18,12 @@ const GROUP_COLORS = {
   "贵金属": "#bf8700",
   "有色": "#2da44e",
   "农产品": "#cf222e",
+  "黑色建材": "#8250df",
+  "能源运输": "#bc4c00",
 };
 
-const REQUIRED_FUTURES_GROUPS = ["化工品", "农产品", "有色", "贵金属"];
-const VIEW_KEYS = ["overview", "long", "short", "early", "trajectory", "trend", "search"];
+const REQUIRED_FUTURES_GROUPS = ["化工品", "农产品", "有色", "贵金属", "黑色建材", "能源运输"];
+const VIEW_KEYS = ["overview", "long", "short", "early", "trajectory", "trend", "momentum", "search"];
 const MA_WINDOWS = [5, 10, 20, 60, 250];
 const RELATIVE_STATE_QUADRANTS = {
   improving: { label: "Improving", xSign: -1, ySign: 1 },
@@ -68,6 +72,20 @@ const SEARCH_COLUMNS = [
   ["month_trend_duration", "月K bar"],
   ["capital_state_duration", "资金bar"],
   ["capital_state", "资金"],
+];
+
+const MOMENTUM_COLUMNS = [
+  ["asset_code", "代码"],
+  ["asset_name_cn", "中文名"],
+  ["asset_name", "英文名"],
+  ["current_momentum_state_duration", "当前状态 bar"],
+  ["current_momentum_state", "当前动能状态"],
+  ["current_momentum_state_return", "当前状态累积涨跌幅"],
+  ["previous_momentum_state", "此前动能状态"],
+  ["previous_momentum_state_return", "此前状态累积涨跌幅"],
+  ["momentum_value", "动能数值"],
+  ["momentum_daily_change", "相比前日变动"],
+  ["momentum_change_label", "动能变化解读"],
 ];
 
 async function main() {
@@ -144,6 +162,7 @@ function render() {
   renderEarlyView(rows);
   renderMonthlyTrajectories();
   renderTrendBars();
+  renderMomentum();
   renderSearch();
 }
 
@@ -515,6 +534,169 @@ function renderTrendBars() {
   });
 }
 
+function momentumRowsForCurrentDate() {
+  return (state.data?.momentumByDate?.[state.date] || []).map((row) => ({
+    ...row,
+    momentum_change_label: momentumStrengthLabel(row),
+  }));
+}
+
+function filterMomentumRows(rows = momentumRowsForCurrentDate()) {
+  const query = text(state.momentumSearch).toLowerCase();
+  return rows.filter((row) => {
+    const stateMatches = state.momentumState === "all" || text(row.current_momentum_state) === state.momentumState;
+    const searchMatches =
+      !query ||
+      [row.asset_code, row.asset_name_cn, row.asset_name, row.asset_key]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query);
+    return stateMatches && searchMatches;
+  });
+}
+
+function setMomentumSearch(value) {
+  state.momentumSearch = text(value);
+  renderMomentum();
+}
+
+function setMomentumState(value) {
+  if (!["all", "正动能", "负动能", "打点"].includes(value)) return;
+  state.momentumState = value;
+  renderMomentum();
+}
+
+function momentumStrengthLabel(row) {
+  const stateName = text(row.current_momentum_state);
+  const change = number(row.momentum_daily_change);
+  if (stateName === "正动能") {
+    if (change > 0) return "正动能增强";
+    if (change < 0) return "正动能减弱";
+    return "正动能不变";
+  }
+  if (stateName === "负动能") {
+    if (change < 0) return "负动能增强";
+    if (change > 0) return "负动能减弱";
+    return "负动能不变";
+  }
+  if (stateName === "打点") return "动能靠近零轴";
+  return "";
+}
+
+function rankMomentumRows(rows, direction) {
+  const filtered = rows.filter((row) => {
+    const stateName = text(row.current_momentum_state);
+    const change = number(row.momentum_daily_change);
+    return direction === "positive"
+      ? stateName === "正动能" && change > 0
+      : stateName === "负动能" && change < 0;
+  });
+  filtered.sort((a, b) => {
+    const changeOrder = direction === "positive"
+      ? number(b.momentum_daily_change) - number(a.momentum_daily_change)
+      : number(a.momentum_daily_change) - number(b.momentum_daily_change);
+    return changeOrder || Math.abs(number(b.momentum_value)) - Math.abs(number(a.momentum_value));
+  });
+  return filtered.map((row, index) => ({ ...row, momentum_rank: index + 1 }));
+}
+
+function renderMomentum() {
+  const allRows = momentumRowsForCurrentDate();
+  const rows = filterMomentumRows(allRows);
+  const input = document.querySelector("#momentumAssetSearch");
+  if (input && input.value !== state.momentumSearch) input.value = state.momentumSearch;
+  document.querySelectorAll("[data-momentum-state]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.momentumState === state.momentumState);
+  });
+
+  const counts = {
+    positive: allRows.filter((row) => text(row.current_momentum_state) === "正动能").length,
+    negative: allRows.filter((row) => text(row.current_momentum_state) === "负动能").length,
+    dot: allRows.filter((row) => text(row.current_momentum_state) === "打点").length,
+    fresh: allRows.filter((row) => number(row.current_momentum_state_duration) === 1).length,
+  };
+  document.querySelector("#momentumMetrics").innerHTML = [
+    ["日期", state.date || "-"],
+    ["动量标的", allRows.length],
+    ["正动能", counts.positive],
+    ["负动能", counts.negative],
+    ["打点", counts.dot],
+    ["新状态 bar=1", counts.fresh],
+  ]
+    .map(([label, value]) => `<div class="metric"><span>${label}</span><strong>${value}</strong></div>`)
+    .join("");
+
+  document.querySelector("#momentumFilterStatus").textContent = `${rows.length} / ${allRows.length}`;
+  const rankColumns = [
+    ["momentum_rank", "排名"],
+    ["asset_code", "代码"],
+    ["asset_name_cn", "中文名"],
+    ["asset_name", "英文名"],
+    ["current_momentum_state_duration", "状态 bar"],
+    ["momentum_value", "动能数值"],
+    ["momentum_daily_change", "相比前日"],
+    ["momentum_change_label", "变化解读"],
+  ];
+  const positive = rankMomentumRows(rows, "positive").slice(0, 20);
+  const negative = rankMomentumRows(rows, "negative").slice(0, 20);
+  const fresh = rows
+    .filter((row) => number(row.current_momentum_state_duration) === 1)
+    .sort((a, b) => Math.abs(number(b.momentum_daily_change)) - Math.abs(number(a.momentum_daily_change)));
+  document.querySelector("#momentumPositiveRank").innerHTML = tableHtml(positive, rankColumns);
+  document.querySelector("#momentumNegativeRank").innerHTML = tableHtml(negative, rankColumns);
+  document.querySelector("#momentumNewStates").innerHTML = tableHtml(fresh, MOMENTUM_COLUMNS);
+  document.querySelector("#momentumTable").innerHTML = tableHtml(rows, MOMENTUM_COLUMNS);
+  drawMomentumScatter(rows);
+}
+
+function drawMomentumScatter(rows) {
+  const stateConfig = {
+    "正动能": { color: "#ff5c7a", label: "正动能" },
+    "负动能": { color: "#2ecc71", label: "负动能" },
+    "打点": { color: "#f2c94c", label: "打点" },
+  };
+  const traces = Object.entries(stateConfig).map(([stateName, config]) => {
+    const items = rows.filter((row) => text(row.current_momentum_state) === stateName);
+    return {
+      type: "scatter",
+      mode: "markers",
+      name: config.label,
+      x: items.map((row) => number(row.momentum_value)),
+      y: items.map((row) => number(row.momentum_daily_change)),
+      text: items.map((row) => displayName(row)),
+      customdata: items.map((row) => [
+        row.asset_code,
+        row.current_momentum_state_duration,
+        row.current_momentum_state_return,
+        row.previous_momentum_state,
+        row.momentum_change_label,
+      ]),
+      marker: { size: 9, color: config.color, opacity: 0.78, line: { width: 1, color: "#0b1018" } },
+      hovertemplate:
+        "标的=%{text}<br>代码=%{customdata[0]}<br>当前状态 bar=%{customdata[1]}<br>当前状态累积涨跌幅=%{customdata[2]:.2f}<br>此前状态=%{customdata[3]}<br>动能值=%{x:.4f}<br>相比前日=%{y:.4f}<br>%{customdata[4]}<extra></extra>",
+    };
+  });
+  Plotly.newPlot(
+    "momentumScatter",
+    traces,
+    {
+      autosize: true,
+      height: 620,
+      margin: { l: 74, r: 24, t: 22, b: 64 },
+      xaxis: { title: "动能数值", zeroline: false },
+      yaxis: { title: "动能数值相比前日变动", zeroline: false },
+      shapes: [
+        { type: "line", xref: "paper", x0: 0, x1: 1, yref: "y", y0: 0, y1: 0, line: { color: "#d0d7de", width: 2 } },
+        { type: "line", xref: "x", x0: 0, x1: 0, yref: "paper", y0: 0, y1: 1, line: { color: "#d0d7de", width: 2 } },
+      ],
+      legend: { orientation: "h" },
+      dragmode: "pan",
+    },
+    { displayModeBar: true, displaylogo: false, responsive: true, scrollZoom: true }
+  );
+}
+
 function renderSearch() {
   const snapshot = currentSnapshot();
   if (!snapshot) return;
@@ -532,7 +714,7 @@ function tableHtml(rows, cols) {
   if (!rows.length) return `<div class="empty">暂无数据</div>`;
   const head = cols.map(([, label]) => `<th>${escapeHtml(label)}</th>`).join("");
   const body = rows
-    .map((row) => `<tr class="${hasRelativeStateBarOne(row) ? "bar-one" : ""}">${cols.map(([key]) => `<td>${formatCell(key, row)}</td>`).join("")}</tr>`)
+    .map((row) => `<tr class="${rowNeedsHighlight(row) ? "bar-one" : ""}">${cols.map(([key]) => `<td>${formatCell(key, row)}</td>`).join("")}</tr>`)
     .join("");
   return `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
@@ -544,6 +726,9 @@ function formatCell(key, row) {
   if (typeof value === "number") return Number.isInteger(value) ? String(value) : value.toFixed(2);
   if (key === "decision") return `<span class="tag ${decisionClass(value)}">${escapeHtml(value)}</span>`;
   if (key === "relative_state_duration" && number(value) === 1) return `<span class="tag hot">1</span>`;
+  if (key === "current_momentum_state_duration" && number(value) === 1) return `<span class="tag hot">1</span>`;
+  if (key === "current_momentum_state") return `<span class="tag momentum-${momentumStateClass(value)}">${escapeHtml(value)}</span>`;
+  if (key === "momentum_change_label") return `<span class="tag momentum-change">${escapeHtml(value)}</span>`;
   return escapeHtml(String(value));
 }
 
@@ -894,6 +1079,12 @@ function selectView(view) {
       if (chart && globalThis.Plotly?.Plots?.resize) Plotly.Plots.resize(chart);
     });
   }
+  if (view === "momentum") {
+    requestAnimationFrame(() => {
+      const chart = document.querySelector("#momentumScatter");
+      if (chart && globalThis.Plotly?.Plots?.resize) Plotly.Plots.resize(chart);
+    });
+  }
 }
 
 function selectedQuadrantGroup() {
@@ -950,6 +1141,14 @@ function hasAnyBarOne(row) {
 
 function hasRelativeStateBarOne(row) {
   return number(row.relative_state_duration) === 1;
+}
+
+function rowNeedsHighlight(row) {
+  return hasRelativeStateBarOne(row) || number(row.current_momentum_state_duration) === 1;
+}
+
+function momentumStateClass(value) {
+  return { "正动能": "positive", "负动能": "negative", "打点": "dot" }[text(value)] || "neutral";
 }
 
 function decisionLabel(row) {
