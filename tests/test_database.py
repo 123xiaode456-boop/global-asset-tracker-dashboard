@@ -159,3 +159,38 @@ def test_untranslated_asset_names_are_queryable(tmp_path):
             "asset_name_translation_status": "unmapped",
         }
     ]
+
+
+def test_momentum_dataset_is_stored_separately_and_idempotently(tmp_path):
+    db = AssetDatabase(tmp_path / "signals.sqlite")
+    db.initialize()
+    parsed = ParsedDataset(
+        metadata=DatasetMetadata(date(2026, 7, 17), "momentum"),
+        source_path=Path("momentum.xlsx"),
+        source_hash="momentum-hash",
+        rows=[
+            {
+                "asset_code": "SPY",
+                "asset_name": "SPDR S&P 500 ETF Trust",
+                "current_momentum_state_duration": 1,
+                "current_momentum_state": "正动能",
+                "current_momentum_state_return": 2.5,
+                "previous_momentum_state": "打点",
+                "previous_momentum_state_return": 0.2,
+                "momentum_value": 1.25,
+                "momentum_daily_change": 0.35,
+            }
+        ],
+    )
+
+    first = db.import_parsed_dataset(parsed, parsed.source_path)
+    second = db.import_parsed_dataset(parsed, parsed.source_path)
+
+    assert first.inserted_rows == 1
+    assert second.duplicate is True
+    assert db.list_momentum_dates() == ["2026-07-17"]
+    row = db.get_momentum_for_date("2026-07-17")[0]
+    assert row["asset_code"] == "SPY"
+    assert row["current_momentum_state"] == "正动能"
+    assert row["momentum_value"] == 1.25
+    assert db.get_momentum_history()[0]["dataset_date"] == "2026-07-17"

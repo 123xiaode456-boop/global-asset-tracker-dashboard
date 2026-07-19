@@ -107,6 +107,20 @@ try {
     throw "Price fetch failed with exit code $LASTEXITCODE"
   }
 
+  $domesticMainFetchArgs = @(
+    "-m", "asset_tracker",
+    "fetch-prices",
+    "--db", $db,
+    "--dataset-type", "domestic_main",
+    "--asset-kind", "domestic-futures",
+    "--missing-only",
+    "--start", $priceStartDate
+  )
+  & $py @domesticMainFetchArgs
+  if ($LASTEXITCODE -ne 0) {
+    throw "Domestic main price fetch failed with exit code $LASTEXITCODE"
+  }
+
   & $py (Join-Path $ProjectRoot "src\export_static_site.py") --site-dir (Join-Path $ProjectRoot "site-v2") --commodity-only
   if ($LASTEXITCODE -ne 0) {
     throw "Static export failed with exit code $LASTEXITCODE"

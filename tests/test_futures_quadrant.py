@@ -22,6 +22,12 @@ def test_classify_futures_group_handles_requested_commodity_groups_and_duplicate
     assert classify_futures_group({"asset_code": "ZN1!", "asset_name_cn": "10年期美债期货", "asset_name": "10-Year T-Note Futures"}) is None
 
 
+def test_classify_domestic_main_contracts_without_bang_suffix():
+    assert classify_futures_group({"asset_code": "AL8", "asset_name": "豆一主连"}) == "农产品"
+    assert classify_futures_group({"asset_code": "IL8", "asset_name": "铁矿主连"}) == "黑色建材"
+    assert classify_futures_group({"asset_code": "SCL8", "asset_name": "国内原油主连"}) == "能源运输"
+
+
 def test_domestic_futures_detection_uses_chinese_contract_name_not_code_only():
     assert is_domestic_commodity_future({"asset_code": "TA1!", "asset_name_cn": "PTA期货"}) is True
     assert domestic_futures_symbol({"asset_code": "TA1!", "asset_name_cn": "PTA期货"}) == "TA0.CNFUT"

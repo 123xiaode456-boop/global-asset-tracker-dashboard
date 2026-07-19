@@ -171,6 +171,7 @@ body[data-active-view="short"] [data-view]:not([data-view="short"]),
 body[data-active-view="early"] [data-view]:not([data-view="early"]),
 body[data-active-view="trajectory"] [data-view]:not([data-view="trajectory"]),
 body[data-active-view="trend"] [data-view]:not([data-view="trend"]),
+body[data-active-view="momentum"] [data-view]:not([data-view="momentum"]),
 body[data-active-view="search"] [data-view]:not([data-view="search"]) {
   display: none;
 }
@@ -308,6 +309,25 @@ tr.bar-one td {
 .tag.short {
   background: rgba(255, 92, 122, 0.14);
   color: var(--red);
+}
+
+.tag.momentum-positive {
+  background: rgba(255, 92, 122, 0.14);
+  color: var(--red);
+}
+
+.tag.momentum-negative {
+  background: rgba(46, 204, 113, 0.14);
+  color: var(--green);
+}
+
+.tag.momentum-dot {
+  background: rgba(242, 201, 76, 0.14);
+  color: var(--amber);
+}
+
+.tag.momentum-change {
+  color: var(--text);
 }
 
 .pill {
@@ -474,6 +494,47 @@ body[data-active-view="early"] section[data-view="early"] {
   min-height: 320px;
 }
 
+.momentum-metrics {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  margin: 14px 0;
+}
+
+.momentum-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 10px;
+  margin: 12px 0;
+}
+
+.momentum-controls input {
+  min-width: 320px;
+}
+
+.momentum-state-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.momentum-chart {
+  width: 100%;
+  min-height: 620px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.momentum-rank-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  margin: 18px 0;
+}
+
+.momentum-rank-panel {
+  min-width: 0;
+}
+
 .subsection {
   padding: 12px;
   background: var(--panel-2);
@@ -513,7 +574,16 @@ pre {
   }
 
   .quadrant-grid,
-  .trend-grid {
+  .trend-grid,
+  .momentum-rank-grid {
     grid-template-columns: 1fr;
+  }
+
+  .momentum-metrics {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .momentum-controls input {
+    min-width: min(320px, 82vw);
   }
 }

@@ -10,7 +10,7 @@ NODE = Path.home() / ".cache" / "codex-runtimes" / "codex-primary-runtime" / "de
 def test_site_v2_index_cache_busts_app_script():
     html = (PROJECT_ROOT / "site-v2" / "index.html").read_text(encoding="utf-8")
 
-    assert '<script src="./app.js?v=20260708-labels-inside"></script>' in html
+    assert '<script src="./app.js?v=20260719-momentum-domestic-main"></script>' in html
 
 
 def test_site_v2_frontend_rules_with_node():
@@ -91,6 +91,13 @@ globalThis.__api = {
   selectedTrendGroup,
   selectTrendGroup,
   renderTrendBars,
+  momentumRowsForCurrentDate,
+  filterMomentumRows,
+  setMomentumSearch,
+  setMomentumState,
+  momentumStrengthLabel,
+  rankMomentumRows,
+  renderMomentum,
   drawKline,
   domesticCommodityRows,
   marketSymbolForRow,
@@ -327,6 +334,13 @@ api.state.data = {
       },
     ],
   },
+  momentumByDate: {
+    "2026-07-03": [
+      { asset_key: "CHEM1|Chem One", asset_code: "CHEM1", asset_name_cn: "化工一号", asset_name: "Chem One", current_momentum_state_duration: 1, current_momentum_state: "正动能", current_momentum_state_return: 2.5, previous_momentum_state: "打点", previous_momentum_state_return: 0.2, momentum_value: 1.25, momentum_daily_change: 0.35 },
+      { asset_key: "SHORTDOM|Short Domestic", asset_code: "SHORTDOM", asset_name_cn: "做空国内", asset_name: "Short Domestic", current_momentum_state_duration: 3, current_momentum_state: "负动能", current_momentum_state_return: -3.5, previous_momentum_state: "打点", previous_momentum_state_return: -0.2, momentum_value: -1.75, momentum_daily_change: -0.55 },
+      { asset_key: "GOLD1|Gold", asset_code: "GOLD1", asset_name_cn: "黄金", asset_name: "Gold", current_momentum_state_duration: 2, current_momentum_state: "打点", current_momentum_state_return: 0.1, previous_momentum_state: "正动能", previous_momentum_state_return: 1.2, momentum_value: 0.02, momentum_daily_change: -0.01 },
+    ],
+  },
   priceHistories: {
     "CHEM1|Chem One": [
       { bar_date: "2026-07-01", open: 10, high: 11, low: 9, close: 10.5, volume: 100 },
@@ -370,6 +384,22 @@ assert.ok(!context.__elements["#longKlinePanel"].innerHTML.includes("海外原�
 assert.ok(!context.__elements["#longKlinePanel"].innerHTML.includes("Unmapped Long"));
 assert.ok(context.__elements["#shortKlinePanel"].innerHTML.includes("做空国内"));
 assert.ok(!context.__elements["#shortKlinePanel"].innerHTML.includes("Unmapped Short"));
+assert.ok(context.__elements["#momentumPositiveRank"].innerHTML.includes("CHEM1"));
+assert.ok(context.__elements["#momentumNegativeRank"].innerHTML.includes("SHORTDOM"));
+assert.ok(context.__elements["#momentumNewStates"].innerHTML.includes("CHEM1"));
+assert.ok(context.__elements["#momentumTable"].innerHTML.includes("GOLD1"));
+assert.strictEqual(api.momentumStrengthLabel(api.momentumRowsForCurrentDate()[0]), "正动能增强");
+assert.strictEqual(api.momentumStrengthLabel(api.momentumRowsForCurrentDate()[1]), "负动能增强");
+assert.strictEqual(JSON.stringify(api.rankMomentumRows(api.momentumRowsForCurrentDate(), "positive").map((row) => row.asset_code)), JSON.stringify(["CHEM1"]));
+api.setMomentumState("负动能");
+assert.strictEqual(JSON.stringify(api.filterMomentumRows().map((row) => row.asset_code)), JSON.stringify(["SHORTDOM"]));
+api.setMomentumState("all");
+api.setMomentumSearch("黄金");
+assert.strictEqual(JSON.stringify(api.filterMomentumRows().map((row) => row.asset_code)), JSON.stringify(["GOLD1"]));
+api.setMomentumSearch("");
+api.selectView("momentum");
+assert.strictEqual(api.selectedView(), "momentum");
+assert.ok(context.__resizes.includes(context.__elements["#momentumScatter"]));
 assert.ok(context.__plots.some((plot) => plot[0].startsWith("longKlinePanel-") && plot[2].title.includes("化工一号")));
 assert.ok(context.__plots.some((plot) => plot[0].startsWith("shortKlinePanel-") && plot[2].title.includes("做空国内")));
 assert.strictEqual(api.marketSymbolForRow({ asset_key: "CHEM1|Chem One", asset_code: "CHEM1" }), "TA0.CNFUT");
@@ -507,6 +537,9 @@ def test_site_v2_styles_support_kline_and_missing_panels():
         ".trend-grid",
         ".trend-card",
         ".trend-chart",
+        ".momentum-controls",
+        ".momentum-chart",
+        ".momentum-rank-grid",
     ]:
         assert selector in css
 
@@ -524,7 +557,7 @@ def test_site_v2_index_uses_module_navigation():
     html = (PROJECT_ROOT / "site-v2" / "index.html").read_text(encoding="utf-8")
 
     assert 'class="module-nav"' in html
-    for view in ["overview", "long", "short", "early", "trajectory", "trend", "search"]:
+    for view in ["overview", "long", "short", "early", "trajectory", "trend", "momentum", "search"]:
         assert f'data-view-target="{view}"' in html
         assert f'data-view="{view}"' in html
 
@@ -532,6 +565,12 @@ def test_site_v2_index_uses_module_navigation():
     assert 'id="earlyAssetSearch"' in html
     assert 'id="earlyResetSearch"' in html
     assert 'id="earlySearchStatus"' in html
+    assert 'id="momentumScatter"' in html
+    assert 'id="momentumAssetSearch"' in html
+    assert 'id="momentumPositiveRank"' in html
+    assert 'id="momentumNegativeRank"' in html
+    assert 'id="momentumNewStates"' in html
+    assert 'id="momentumTable"' in html
     assert html.index('data-view="trajectory"') < html.index('id="monthlyTrajectories"')
 
 

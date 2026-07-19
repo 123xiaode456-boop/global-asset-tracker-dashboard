@@ -12,7 +12,7 @@ from .database import AssetDatabase
 from .domestic_futures import domestic_futures_group
 
 
-REQUESTED_GROUPS = ("化工品", "农产品", "有色", "贵金属")
+REQUESTED_GROUPS = ("化工品", "农产品", "有色", "贵金属", "黑色建材", "能源运输")
 
 FUTURES_GROUP_BY_NAME = {
     "铸造铝合金期货": "有色",
@@ -96,6 +96,8 @@ GROUP_COLORS = {
     "贵金属": "#bf8700",
     "有色": "#2da44e",
     "农产品": "#cf222e",
+    "黑色建材": "#8250df",
+    "能源运输": "#bc4c00",
 }
 
 
@@ -109,6 +111,9 @@ class FuturesTrajectory:
 
 
 def classify_futures_group(row: dict[str, Any]) -> str | None:
+    group = domestic_futures_group(row)
+    if group:
+        return group
     code = str(row.get("asset_code", ""))
     if "!" not in code:
         return None
@@ -119,9 +124,6 @@ def classify_futures_group(row: dict[str, Any]) -> str | None:
     for name, group in FUTURES_GROUP_BY_NAME.items():
         if name and name in original:
             return group
-    group = domestic_futures_group(row)
-    if group:
-        return group
     return None
 
 

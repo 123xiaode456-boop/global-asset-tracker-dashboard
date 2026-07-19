@@ -12,6 +12,7 @@ from asset_tracker.dashboard_data import load_dashboard_snapshot
 from asset_tracker.database import AssetDatabase
 from asset_tracker.domestic_futures import domestic_futures_symbol, is_domestic_commodity_future
 from asset_tracker.futures_quadrant import load_futures_commodity_trajectories
+from asset_tracker.rules import summarize_rows
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -50,18 +51,40 @@ def build_static_payload(db_path: str | Path, commodity_only: bool = False) -> d
         dates_by_type[key_type] = base_snapshot.available_dates
         for dataset_date in base_snapshot.available_dates:
             snapshot = load_dashboard_snapshot(db_path, dataset_type, dataset_date)
-            snapshots[f"{key_type}|{dataset_date}"] = _snapshot_payload(snapshot)
-            for row in snapshot.latest_rows:
+            snapshot_payload = _snapshot_payload(snapshot)
+            if dataset_type == "core":
+                snapshot_payload = _merge_domestic_main_rows(
+                    snapshot_payload,
+                    db.get_observations_for_date(dataset_date, "domestic_main"),
+                )
+            snapshots[f"{key_type}|{dataset_date}"] = snapshot_payload
+            for row in snapshot_payload["latestRows"]:
                 asset_key = str(row.get("asset_key") or f"{row.get('asset_code')}|{row.get('asset_name')}")
                 rows_for_prices[asset_key] = row
 
     futures_by_date: dict[str, list[dict[str, Any]]] = {}
     for dataset_date in dates_by_type.get("core", []):
-        trajectories = load_futures_commodity_trajectories(db_path, dataset_date=dataset_date, dataset_type="core")
+        trajectories = [
+            *load_futures_commodity_trajectories(db_path, dataset_date=dataset_date, dataset_type="core"),
+            *load_futures_commodity_trajectories(
+                db_path,
+                dataset_date=dataset_date,
+                dataset_type="domestic_main",
+            ),
+        ]
         futures_by_date[dataset_date] = [
             _futures_item_payload(item)
             for item in trajectories
         ]
+
+    momentum_dates = db.list_momentum_dates()
+    momentum_by_date = {
+        dataset_date: db.get_momentum_for_date(dataset_date)
+        for dataset_date in momentum_dates
+    }
+    momentum_history_by_asset: dict[str, list[dict[str, Any]]] = {}
+    for row in db.get_momentum_history():
+        momentum_history_by_asset.setdefault(str(row.get("asset_key") or ""), []).append(row)
 
     payload = {
         "generatedAt": datetime.now().isoformat(timespec="seconds"),
@@ -69,6 +92,9 @@ def build_static_payload(db_path: str | Path, commodity_only: bool = False) -> d
         "datesByType": dates_by_type,
         "snapshots": snapshots,
         "futuresByDate": futures_by_date,
+        "momentumDates": momentum_dates,
+        "momentumByDate": momentum_by_date,
+        "momentumHistoryByAsset": momentum_history_by_asset,
     }
     if commodity_only:
         _filter_payload_to_commodities(payload, rows_for_prices)
@@ -90,6 +116,23 @@ def _snapshot_payload(snapshot) -> dict[str, Any]:
         "riskWatch": snapshot.risk_watch,
         "longOpportunities": snapshot.long_opportunities,
         "shortOpportunities": snapshot.short_opportunities,
+    }
+
+
+def _merge_domestic_main_rows(snapshot: dict[str, Any], domestic_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    if not domestic_rows:
+        return snapshot
+    combined_rows = [*snapshot["latestRows"], *domestic_rows]
+    summary = summarize_rows(combined_rows)
+    return {
+        **snapshot,
+        "assetCount": len(combined_rows),
+        "latestCounts": summary.counts,
+        "latestRows": combined_rows,
+        "focusWatch": summary.focus_watch,
+        "riskWatch": summary.risk_watch,
+        "longOpportunities": summary.long_opportunities,
+        "shortOpportunities": summary.short_opportunities,
     }
 
 

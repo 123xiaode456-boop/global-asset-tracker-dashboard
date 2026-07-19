@@ -36,6 +36,7 @@
       <button class="module-button" type="button" data-view-target="early" onclick="selectView('early')">早期转折</button>
       <button class="module-button" type="button" data-view-target="trajectory" onclick="selectView('trajectory')">四象限轨迹</button>
       <button class="module-button" type="button" data-view-target="trend" onclick="selectView('trend')">三级别趋势</button>
+      <button class="module-button" type="button" data-view-target="momentum" onclick="selectView('momentum')">动量状态</button>
       <button class="module-button" type="button" data-view-target="search" onclick="selectView('search')">搜索</button>
     </nav>
 
@@ -89,7 +90,7 @@
       <section data-view="trajectory">
         <h2>四象限轨迹</h2>
         <p class="chart-request">【四象限一个月轨迹线 按板块分页 每个品种单独一张图】</p>
-        <p class="rule">选择化工品、农产品、有色、贵金属任一板块后，按当前日期往前 30 自然日内所有已有数据绘制该板块每个品种的独立四象限图。</p>
+        <p class="rule">选择化工品、农产品、有色、贵金属、黑色建材、能源运输任一板块后，按当前日期往前 30 自然日内所有已有数据绘制该板块每个品种的独立四象限图。</p>
         <div id="monthlyTrajectories"></div>
       </section>
 
@@ -104,18 +105,52 @@
           <li>上行趋势逢低布局时间窗口，周上月上，日上转下或日下转上</li>
         </ol>
         <p class="chart-request">【日周月趋势柱形图 按板块分页 每个品种单独一张图】</p>
-        <p class="rule">选择化工品、农产品、有色、贵金属任一板块后，逐个品种展示近一个月日/周/月趋势持续 bar；上行趋势取正，下行趋势取负，无趋势取 0。</p>
+        <p class="rule">选择化工品、农产品、有色、贵金属、黑色建材、能源运输任一板块后，逐个品种展示近一个月日/周/月趋势持续 bar；上行趋势取正，下行趋势取负，无趋势取 0。</p>
         <div id="trendBars"></div>
       </section>
 
+      <section data-view="momentum">
+        <h2>五、动量状态</h2>
+        <p class="rule">源表口径：正动能的动能数值大于 0，负动能小于 0，打点位于零轴附近；“相比前日变动”表示动能增强或减弱，不能单独等同于买卖方向。本页只做数据观察，不构成投资建议。</p>
+        <div class="metrics momentum-metrics" id="momentumMetrics"></div>
+        <div class="momentum-controls">
+          <label>
+            标的搜索
+            <input id="momentumAssetSearch" type="search" placeholder="代码 / 中文 / 英文名称" oninput="setMomentumSearch(this.value)" />
+          </label>
+          <div class="momentum-state-tabs" role="group" aria-label="动量状态筛选">
+            <button class="quadrant-tab active" type="button" data-momentum-state="all" onclick="setMomentumState('all')">全部</button>
+            <button class="quadrant-tab" type="button" data-momentum-state="正动能" onclick="setMomentumState('正动能')">正动能</button>
+            <button class="quadrant-tab" type="button" data-momentum-state="负动能" onclick="setMomentumState('负动能')">负动能</button>
+            <button class="quadrant-tab" type="button" data-momentum-state="打点" onclick="setMomentumState('打点')">打点</button>
+          </div>
+          <span id="momentumFilterStatus" class="filter-status"></span>
+        </div>
+        <div id="momentumScatter" class="momentum-chart"></div>
+        <div class="momentum-rank-grid">
+          <div class="momentum-rank-panel">
+            <h3>正动能增强排名</h3>
+            <div id="momentumPositiveRank"></div>
+          </div>
+          <div class="momentum-rank-panel">
+            <h3>负动能增强排名</h3>
+            <div id="momentumNegativeRank"></div>
+          </div>
+        </div>
+        <h3>新发生状态：持续 bar = 1</h3>
+        <div id="momentumNewStates"></div>
+        <h3>动量状态完整明细</h3>
+        <div id="momentumTable"></div>
+      </section>
+
       <section data-view="search">
-        <h2>五、搜索</h2>
+        <h2>六、搜索</h2>
         <p class="chart-request">【输入关键字 显示所有相关标的的面板数据 并给出判断多空】</p>
         <p class="rule">面板展示商品数据总表中相关标的的单独行：当前比价状态持续时间、当前比价状态、当前比价状态涨幅、日/周/月趋势及持续时间、当前杠杆资金状态持续时间、当前杠杆资金状态，并给出多空/观望。</p>
         <div id="searchPanel"></div>
       </section>
     </main>
 
-    <script src="./app.js?v=20260708-labels-inside"></script>
+    <script src="./app.js?v=20260719-momentum-domestic-main"></script>
   </body>
 </html>

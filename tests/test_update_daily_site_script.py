@@ -12,5 +12,6 @@ def test_update_daily_site_fetches_futures_prices_before_static_export():
 
     assert fetch_index < export_index
     assert "--dataset-type\", \"core\"" in script
+    assert "--dataset-type\", \"domestic_main\"" in script
     assert "--asset-kind\", \"domestic-futures\"" in script
     assert "--missing-only" in script

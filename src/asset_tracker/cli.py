@@ -47,13 +47,14 @@ def run_import(
         parsed = parse_dataset_file(import_path)
         result = db.import_parsed_dataset(parsed, import_path)
         results.append(result)
-        rows = db.get_observations_for_date(result.dataset_date, result.dataset_type)
-        write_markdown_report(
-            dataset_date=result.dataset_date,
-            dataset_type=result.dataset_type,
-            summary=summarize_rows(rows),
-            report_dir=report_dir,
-        )
+        if result.dataset_type != "momentum":
+            rows = db.get_observations_for_date(result.dataset_date, result.dataset_type)
+            write_markdown_report(
+                dataset_date=result.dataset_date,
+                dataset_type=result.dataset_type,
+                summary=summarize_rows(rows),
+                report_dir=report_dir,
+            )
 
     return results
 
@@ -277,7 +278,11 @@ def main(argv: list[str] | None = None) -> int:
     price_parser = subparsers.add_parser("fetch-prices", help="Fetch daily OHLCV bars for latest observations.")
     price_parser.add_argument("--db", default=str(DEFAULT_DB), help="SQLite database path.")
     price_parser.add_argument("--asset", help="Asset code or asset_key, for example SPY or SPY|SPDR S&P 500 ETF Trust.")
-    price_parser.add_argument("--dataset-type", choices=["core", "betting"], help="Limit to one dataset type.")
+    price_parser.add_argument(
+        "--dataset-type",
+        choices=["core", "betting", "domestic_main"],
+        help="Limit to one dataset type.",
+    )
     price_parser.add_argument(
         "--asset-kind",
         choices=["us-like", "us-etf", "six-digit", "futures", "domestic-futures", "no-candidate"],

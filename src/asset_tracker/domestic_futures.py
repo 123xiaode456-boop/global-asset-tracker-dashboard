@@ -48,6 +48,38 @@ DOMESTIC_FUTURES_SYMBOL_BY_NAME = {
     "锌期货": "ZN0",
 }
 
+DOMESTIC_MAIN_BY_CODE = {
+    "AL8": ("A0", "农产品"),
+    "BBL8": ("BB0", "黑色建材"),
+    "BL8": ("B0", "农产品"),
+    "CL8": ("C0", "农产品"),
+    "CSL8": ("CS0", "农产品"),
+    "IL8": ("I0", "黑色建材"),
+    "JDL8": ("JD0", "农产品"),
+    "JL8": ("J0", "黑色建材"),
+    "JML8": ("JM0", "黑色建材"),
+    "LL8": ("L0", "化工品"),
+    "ML8": ("M0", "农产品"),
+    "PL8": ("P0", "农产品"),
+    "PPL8": ("PP0", "化工品"),
+    "VL8": ("V0", "化工品"),
+    "YL8": ("Y0", "农产品"),
+    "SCL8": ("SC0", "能源运输"),
+    "BCL8": ("BC0", "有色"),
+    "LUL8": ("LU0", "化工品"),
+    "NRL8": ("NR0", "化工品"),
+    "EBL8": ("EB0", "化工品"),
+    "EGL8": ("EG0", "化工品"),
+    "FBL8": ("FB0", "黑色建材"),
+    "LHL8": ("LH0", "农产品"),
+    "PGL8": ("PG0", "化工品"),
+    "RRL8": ("RR0", "农产品"),
+    "LCL8": ("LC0", "有色"),
+    "PSL8": ("PS0", "有色"),
+    "SIL8": ("SI0", "有色"),
+    "ECL8": ("EC0", "能源运输"),
+}
+
 DOMESTIC_FUTURES_GROUP_BY_SYMBOL = {
     "AG0": "贵金属",
     "AU0": "贵金属",
@@ -117,6 +149,9 @@ def is_domestic_commodity_future(row: dict[str, Any]) -> bool:
 
 
 def domestic_futures_symbol(row: dict[str, Any]) -> str | None:
+    domestic_main = DOMESTIC_MAIN_BY_CODE.get(str(row.get("asset_code") or "").strip().upper())
+    if domestic_main:
+        return f"{domestic_main[0]}.CNFUT"
     name = _contract_name(row)
     symbol = DOMESTIC_FUTURES_SYMBOL_BY_NAME.get(name)
     if not symbol and not _has_foreign_hint(row):
@@ -125,6 +160,9 @@ def domestic_futures_symbol(row: dict[str, Any]) -> str | None:
 
 
 def domestic_futures_group(row: dict[str, Any]) -> str | None:
+    domestic_main = DOMESTIC_MAIN_BY_CODE.get(str(row.get("asset_code") or "").strip().upper())
+    if domestic_main:
+        return domestic_main[1]
     symbol = domestic_futures_symbol(row)
     if not symbol:
         return None

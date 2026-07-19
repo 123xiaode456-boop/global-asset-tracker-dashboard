@@ -107,6 +107,56 @@ def test_static_export_marks_domestic_futures_in_futures_by_date(tmp_path):
     }
 
 
+def test_static_export_merges_domestic_main_and_exports_momentum(tmp_path):
+    db = AssetDatabase(tmp_path / "signals.sqlite")
+    db.initialize()
+    core = ParsedDataset(
+        metadata=DatasetMetadata(date(2026, 7, 17), "core"),
+        source_path=Path("core.xlsx"),
+        source_hash="core-2026-07-17",
+        rows=[_sample_row("GC1!", "Gold Futures", "黄金期货")],
+    )
+    domestic = ParsedDataset(
+        metadata=DatasetMetadata(date(2026, 7, 17), "domestic_main"),
+        source_path=Path("domestic-main.xlsx"),
+        source_hash="domestic-main-2026-07-17",
+        rows=[_sample_row("AL8", "豆一主连", "豆一主连")],
+    )
+    momentum = ParsedDataset(
+        metadata=DatasetMetadata(date(2026, 7, 17), "momentum"),
+        source_path=Path("momentum.xlsx"),
+        source_hash="momentum-2026-07-17",
+        rows=[
+            {
+                "asset_code": "GC1!",
+                "asset_name": "Gold Futures",
+                "current_momentum_state_duration": 1,
+                "current_momentum_state": "正动能",
+                "current_momentum_state_return": 2.5,
+                "previous_momentum_state": "打点",
+                "previous_momentum_state_return": 0.2,
+                "momentum_value": 1.25,
+                "momentum_daily_change": 0.35,
+            }
+        ],
+    )
+
+    db.import_parsed_dataset(core, core.source_path)
+    db.import_parsed_dataset(domestic, domestic.source_path)
+    db.import_parsed_dataset(momentum, momentum.source_path)
+
+    payload = build_static_payload(db.path, commodity_only=True)
+    snapshot = payload["snapshots"]["core|2026-07-17"]
+
+    assert [row["asset_code"] for row in snapshot["latestRows"]] == ["GC1!", "AL8"]
+    assert payload["momentumDates"] == ["2026-07-17"]
+    assert payload["momentumByDate"]["2026-07-17"][0]["current_momentum_state"] == "正动能"
+    assert payload["momentumHistoryByAsset"]["GC1!|Gold Futures"][0]["momentum_value"] == 1.25
+    domestic_item = next(item for item in payload["futuresByDate"]["2026-07-17"] if item["assetCode"] == "AL8")
+    assert domestic_item["group"] == "农产品"
+    assert domestic_item["isDomestic"] is True
+
+
 def _sample_row(asset_code: str, asset_name: str, asset_name_cn: str = "") -> dict:
     return {
         "asset_code": asset_code,

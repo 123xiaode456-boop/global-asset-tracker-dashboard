@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .asset_names import translate_asset_name
-from .parsers import CANONICAL_COLUMNS, ParsedDataset
+from .parsers import CANONICAL_COLUMNS, MOMENTUM_CANONICAL_COLUMNS, ParsedDataset
 
 
 OBSERVATION_COLUMNS = [
@@ -17,6 +17,17 @@ OBSERVATION_COLUMNS = [
     "source_row_number",
     "asset_key",
     *CANONICAL_COLUMNS,
+    "asset_name_cn",
+    "asset_name_translation_status",
+    "source_file_hash",
+    "imported_at",
+]
+
+MOMENTUM_OBSERVATION_COLUMNS = [
+    "dataset_date",
+    "source_row_number",
+    "asset_key",
+    *MOMENTUM_CANONICAL_COLUMNS,
     "asset_name_cn",
     "asset_name_translation_status",
     "source_file_hash",
@@ -94,6 +105,29 @@ class AssetDatabase:
                     imported_at TEXT NOT NULL,
                     PRIMARY KEY (dataset_date, dataset_type, source_row_number)
                 );
+
+                CREATE TABLE IF NOT EXISTS momentum_observations (
+                    dataset_date TEXT NOT NULL,
+                    source_row_number INTEGER NOT NULL,
+                    asset_key TEXT NOT NULL,
+                    asset_code TEXT NOT NULL,
+                    asset_name TEXT NOT NULL,
+                    asset_name_cn TEXT,
+                    asset_name_translation_status TEXT,
+                    current_momentum_state_duration INTEGER,
+                    current_momentum_state TEXT,
+                    current_momentum_state_return REAL,
+                    previous_momentum_state TEXT,
+                    previous_momentum_state_return REAL,
+                    momentum_value REAL,
+                    momentum_daily_change REAL,
+                    source_file_hash TEXT NOT NULL,
+                    imported_at TEXT NOT NULL,
+                    PRIMARY KEY (dataset_date, source_row_number)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_momentum_observations_asset_date
+                ON momentum_observations(asset_key, dataset_date);
 
                 CREATE TABLE IF NOT EXISTS import_logs (
                     file_hash TEXT PRIMARY KEY,
@@ -199,24 +233,36 @@ class AssetDatabase:
                         dataset_type,
                     ),
                 )
-                observation = {
-                    "dataset_date": dataset_date,
-                    "dataset_type": dataset_type,
-                    "source_row_number": row_number,
-                    "asset_key": asset_key,
-                    **row,
-                    "asset_name_cn": translation.name_cn,
-                    "asset_name_translation_status": translation.status,
-                    "source_file_hash": parsed.source_hash,
-                    "imported_at": imported_at,
-                }
-                placeholders = ", ".join("?" for _ in OBSERVATION_COLUMNS)
-                columns = ", ".join(OBSERVATION_COLUMNS)
-                values = [observation[column] for column in OBSERVATION_COLUMNS]
-                connection.execute(
-                    f"INSERT OR REPLACE INTO observations ({columns}) VALUES ({placeholders})",
-                    values,
-                )
+                if dataset_type == "momentum":
+                    observation = {
+                        "dataset_date": dataset_date,
+                        "source_row_number": row_number,
+                        "asset_key": asset_key,
+                        **row,
+                        "asset_name_cn": translation.name_cn,
+                        "asset_name_translation_status": translation.status,
+                        "source_file_hash": parsed.source_hash,
+                        "imported_at": imported_at,
+                    }
+                    _insert_observation(
+                        connection,
+                        "momentum_observations",
+                        MOMENTUM_OBSERVATION_COLUMNS,
+                        observation,
+                    )
+                else:
+                    observation = {
+                        "dataset_date": dataset_date,
+                        "dataset_type": dataset_type,
+                        "source_row_number": row_number,
+                        "asset_key": asset_key,
+                        **row,
+                        "asset_name_cn": translation.name_cn,
+                        "asset_name_translation_status": translation.status,
+                        "source_file_hash": parsed.source_hash,
+                        "imported_at": imported_at,
+                    }
+                    _insert_observation(connection, "observations", OBSERVATION_COLUMNS, observation)
 
             connection.execute(
                 """
@@ -309,6 +355,35 @@ class AssetDatabase:
         query += " ORDER BY dataset_type, source_row_number"
         with self.connect() as connection:
             return [_row_to_dict(row) for row in connection.execute(query, params).fetchall()]
+
+    def list_momentum_dates(self) -> list[str]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                "SELECT DISTINCT dataset_date FROM momentum_observations ORDER BY dataset_date"
+            ).fetchall()
+            return [row[0] for row in rows]
+
+    def get_momentum_for_date(self, dataset_date: str) -> list[dict[str, Any]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM momentum_observations
+                WHERE dataset_date = ?
+                ORDER BY source_row_number
+                """,
+                (dataset_date,),
+            ).fetchall()
+            return [_row_to_dict(row) for row in rows]
+
+    def get_momentum_history(self) -> list[dict[str, Any]]:
+        with self.connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM momentum_observations
+                ORDER BY asset_key, dataset_date, source_row_number
+                """
+            ).fetchall()
+            return [_row_to_dict(row) for row in rows]
 
     def get_asset_history(self, asset_code: str) -> list[dict[str, Any]]:
         lookup_code = _asset_code_prefix(asset_code)
@@ -442,6 +517,19 @@ class AssetDatabase:
                     (translation.name_cn, translation.status, row["rowid"]),
                 )
                 updated_observations += 1
+            momentum_rows = connection.execute(
+                "SELECT rowid, asset_code, asset_name FROM momentum_observations"
+            ).fetchall()
+            for row in momentum_rows:
+                translation = translate_asset_name(row["asset_code"], row["asset_name"])
+                connection.execute(
+                    """
+                    UPDATE momentum_observations
+                    SET asset_name_cn = ?, asset_name_translation_status = ?
+                    WHERE rowid = ?
+                    """,
+                    (translation.name_cn, translation.status, row["rowid"]),
+                )
         return {"assets": updated_assets, "observations": updated_observations}
 
     def list_untranslated_asset_names(self) -> list[dict[str, Any]]:
@@ -516,6 +604,21 @@ class AssetDatabase:
 
 def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
     return {key: row[key] for key in row.keys()}
+
+
+def _insert_observation(
+    connection: sqlite3.Connection,
+    table_name: str,
+    columns: list[str],
+    observation: dict[str, Any],
+) -> None:
+    placeholders = ", ".join("?" for _ in columns)
+    column_sql = ", ".join(columns)
+    values = [observation[column] for column in columns]
+    connection.execute(
+        f"INSERT OR REPLACE INTO {table_name} ({column_sql}) VALUES ({placeholders})",
+        values,
+    )
 
 
 def _ensure_column(connection: sqlite3.Connection, table_name: str, column_name: str, definition: str) -> None:

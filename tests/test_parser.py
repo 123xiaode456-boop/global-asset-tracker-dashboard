@@ -1,8 +1,14 @@
 from datetime import date
 from zipfile import ZipFile, ZIP_DEFLATED
 
-from asset_tracker.parsers import CANONICAL_COLUMNS, detect_metadata, parse_dataset_file
-from asset_tracker.parsers import SOURCE_COLUMNS
+from asset_tracker.parsers import (
+    CANONICAL_COLUMNS,
+    MOMENTUM_CANONICAL_COLUMNS,
+    MOMENTUM_SOURCE_COLUMNS,
+    SOURCE_COLUMNS,
+    detect_metadata,
+    parse_dataset_file,
+)
 
 from conftest import BETTING_PDF, CORE_PDF
 
@@ -15,6 +21,14 @@ def test_detects_dataset_date_and_type_from_filename():
     assert core.dataset_type == "core"
     assert betting.dataset_date == date(2026, 6, 9)
     assert betting.dataset_type == "betting"
+
+
+def test_detects_domestic_main_and_momentum_dataset_types():
+    domestic = detect_metadata("26-07-17 数据总表（国内主连）（趋势识别＋相对比价＋资金监控）（测试）.xlsx")
+    momentum = detect_metadata("26-07-17 动量状态（测试）（核心数据集）.xlsx")
+
+    assert domestic.dataset_type == "domestic_main"
+    assert momentum.dataset_type == "momentum"
 
 
 def test_parse_core_pdf_extracts_235_rows_with_standard_columns():
@@ -191,6 +205,27 @@ def test_parse_daily_excel_accepts_reordered_columns(tmp_path):
     assert parsed.rows[0]["day_trend"] == "上行趋势"
     assert parsed.rows[0]["relative_strength"] == 118.88
     assert parsed.rows[0]["capital_state"] == "加杠杆"
+
+
+def test_parse_momentum_excel_extracts_typed_columns(tmp_path):
+    workbook = tmp_path / "26-07-17 动量状态（测试）（核心数据集）.xlsx"
+    _write_minimal_xlsx(
+        workbook,
+        [
+            MOMENTUM_SOURCE_COLUMNS,
+            ["SPY", "SPDR S&P 500 ETF Trust", 1, "正动能", 2.5, "打点", 0.2, 1.25, 0.35],
+        ],
+    )
+
+    parsed = parse_dataset_file(workbook)
+
+    assert parsed.metadata.dataset_type == "momentum"
+    assert parsed.row_count == 1
+    assert list(parsed.rows[0]) == MOMENTUM_CANONICAL_COLUMNS
+    assert parsed.rows[0]["current_momentum_state_duration"] == 1
+    assert parsed.rows[0]["current_momentum_state"] == "正动能"
+    assert parsed.rows[0]["momentum_value"] == 1.25
+    assert parsed.rows[0]["momentum_daily_change"] == 0.35
 
 
 def _write_minimal_xlsx(path, rows):

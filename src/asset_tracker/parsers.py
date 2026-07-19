@@ -67,6 +67,30 @@ CANONICAL_COLUMNS = [
     "capital_daily_change",
 ]
 
+MOMENTUM_SOURCE_COLUMNS = [
+    "代码",
+    "标的名称",
+    "当前动能状态持续时间",
+    "当前动能状态",
+    "当前动能状态累积涨跌幅 (%)",
+    "此前动能状态",
+    "此前动能状态累积涨跌幅 (%)",
+    "动能数值",
+    "动能数值相比前日变动",
+]
+
+MOMENTUM_CANONICAL_COLUMNS = [
+    "asset_code",
+    "asset_name",
+    "current_momentum_state_duration",
+    "current_momentum_state",
+    "current_momentum_state_return",
+    "previous_momentum_state",
+    "previous_momentum_state_return",
+    "momentum_value",
+    "momentum_daily_change",
+]
+
 COLUMN_MAP = dict(zip(SOURCE_COLUMNS, CANONICAL_COLUMNS))
 
 INTEGER_FIELDS = {
@@ -89,6 +113,14 @@ FLOAT_FIELDS = {
     "previous_capital_state_return",
     "capital_value",
     "capital_daily_change",
+}
+
+MOMENTUM_INTEGER_FIELDS = {"current_momentum_state_duration"}
+MOMENTUM_FLOAT_FIELDS = {
+    "current_momentum_state_return",
+    "previous_momentum_state_return",
+    "momentum_value",
+    "momentum_daily_change",
 }
 
 
@@ -118,7 +150,11 @@ def detect_metadata(path: str | Path) -> DatasetMetadata:
     year, month, day = (int(part) for part in match.groups())
     dataset_date = date(2000 + year, month, day)
 
-    if "核心数据集" in source.name:
+    if "动量状态" in source.name:
+        dataset_type = "momentum"
+    elif "国内主连" in source.name:
+        dataset_type = "domestic_main"
+    elif "核心数据集" in source.name:
         dataset_type = "core"
     elif "押注工具" in source.name:
         dataset_type = "betting"
@@ -134,7 +170,7 @@ def parse_dataset_file(path: str | Path) -> ParsedDataset:
     if suffix == ".pdf":
         rows = _parse_pdf(source)
     elif suffix in {".xlsx", ".xls"}:
-        rows = _parse_excel(source)
+        rows = _parse_excel(source, metadata.dataset_type)
     else:
         raise ValueError(f"Unsupported dataset file type: {source.suffix}")
 
@@ -175,36 +211,56 @@ def _parse_pdf(path: Path) -> list[dict[str, Any]]:
     return rows
 
 
-def _parse_excel(path: Path) -> list[dict[str, Any]]:
+def _parse_excel(path: Path, dataset_type: str) -> list[dict[str, Any]]:
+    if dataset_type == "momentum":
+        return _parse_excel_table(
+            path,
+            MOMENTUM_SOURCE_COLUMNS,
+            MOMENTUM_CANONICAL_COLUMNS,
+            MOMENTUM_INTEGER_FIELDS,
+            MOMENTUM_FLOAT_FIELDS,
+        )
+    return _parse_excel_table(path, SOURCE_COLUMNS, CANONICAL_COLUMNS, INTEGER_FIELDS, FLOAT_FIELDS)
+
+
+def _parse_excel_table(
+    path: Path,
+    source_columns: list[str],
+    canonical_columns: list[str],
+    integer_fields: set[str],
+    float_fields: set[str],
+) -> list[dict[str, Any]]:
     sheets = pd.read_excel(path, sheet_name=None, dtype=str, header=None)
     for frame in sheets.values():
-        header_index = _find_excel_header_row(frame)
+        header_index = _find_excel_header_row(frame, source_columns)
         if header_index is None:
             continue
         header = [_clean_text(value) for value in frame.iloc[header_index].tolist()]
-        column_positions = _source_column_positions(header)
+        column_positions = _source_column_positions(header, source_columns)
         parsed_rows: list[dict[str, Any]] = []
         for _, row in frame.iloc[header_index + 1 :].iterrows():
             cells = [_clean_text(row.iloc[index]) if index < len(row) else "" for index in column_positions]
             if any(cells):
-                parsed_rows.append(_normalize_row(cells))
+                parsed_rows.append(
+                    _normalize_columns(cells, source_columns, canonical_columns, integer_fields, float_fields)
+                )
         if parsed_rows:
             return parsed_rows
     raise ValueError(f"Could not find a dataset table in Excel workbook: {path}")
 
 
-def _find_excel_header_row(frame: pd.DataFrame) -> int | None:
+def _find_excel_header_row(frame: pd.DataFrame, source_columns: list[str]) -> int | None:
     max_scan = min(15, len(frame))
     for index in range(max_scan):
         values = [_clean_text(value) for value in frame.iloc[index].tolist()]
-        if _looks_like_excel_header(values):
+        if _looks_like_excel_header(values, source_columns):
             return index
     return None
 
 
-def _source_column_positions(header: list[str]) -> list[int]:
+def _source_column_positions(header: list[str], source_columns: list[str]) -> list[int]:
     positions: list[int] = []
-    for source_column in SOURCE_COLUMNS:
+    for source_column in source_columns:
         try:
             positions.append(header.index(source_column))
         except ValueError as exc:
@@ -216,8 +272,8 @@ def _looks_like_header(header: list[str]) -> bool:
     return len(header) >= len(SOURCE_COLUMNS) and header[: len(SOURCE_COLUMNS)] == SOURCE_COLUMNS
 
 
-def _looks_like_excel_header(header: list[str]) -> bool:
-    return set(SOURCE_COLUMNS).issubset(set(header))
+def _looks_like_excel_header(header: list[str], source_columns: list[str]) -> bool:
+    return set(source_columns).issubset(set(header))
 
 
 def _normalize_row(cells: list[str]) -> dict[str, Any]:
@@ -233,6 +289,27 @@ def _normalize_row(cells: list[str]) -> dict[str, Any]:
         else:
             normalized[canonical] = _clean_text(raw_value)
     return {column: normalized[column] for column in CANONICAL_COLUMNS}
+
+
+def _normalize_columns(
+    cells: list[str],
+    source_columns: list[str],
+    canonical_columns: list[str],
+    integer_fields: set[str],
+    float_fields: set[str],
+) -> dict[str, Any]:
+    if len(cells) < len(source_columns):
+        raise ValueError(f"Dataset row has {len(cells)} columns; expected {len(source_columns)}")
+    normalized: dict[str, Any] = {}
+    for index, canonical in enumerate(canonical_columns):
+        raw_value = cells[index]
+        if canonical in integer_fields:
+            normalized[canonical] = _to_int(raw_value)
+        elif canonical in float_fields:
+            normalized[canonical] = _to_float(raw_value)
+        else:
+            normalized[canonical] = _clean_text(raw_value)
+    return {column: normalized[column] for column in canonical_columns}
 
 
 def _clean_cells(row: list[Any]) -> list[str]:
