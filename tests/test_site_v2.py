@@ -10,7 +10,7 @@ NODE = Path.home() / ".cache" / "codex-runtimes" / "codex-primary-runtime" / "de
 def test_site_v2_index_cache_busts_app_script():
     html = (PROJECT_ROOT / "site-v2" / "index.html").read_text(encoding="utf-8")
 
-    assert '<script src="./app.js?v=20260719-momentum-domestic-main"></script>' in html
+    assert '<script src="./app.js?v=20260720-combined-momentum"></script>' in html
 
 
 def test_site_v2_frontend_rules_with_node():
@@ -96,6 +96,7 @@ globalThis.__api = {
   setMomentumSearch,
   setMomentumState,
   momentumStrengthLabel,
+  momentumStateKind,
   rankMomentumRows,
   renderMomentum,
   drawKline,
@@ -390,6 +391,10 @@ assert.ok(context.__elements["#momentumNewStates"].innerHTML.includes("CHEM1"));
 assert.ok(context.__elements["#momentumTable"].innerHTML.includes("GOLD1"));
 assert.strictEqual(api.momentumStrengthLabel(api.momentumRowsForCurrentDate()[0]), "正动能增强");
 assert.strictEqual(api.momentumStrengthLabel(api.momentumRowsForCurrentDate()[1]), "负动能增强");
+assert.strictEqual(api.momentumStateKind({ current_momentum_state: "正" }), "positive");
+assert.strictEqual(api.momentumStateKind({ current_momentum_state: "负" }), "negative");
+assert.strictEqual(api.momentumStrengthLabel({ current_momentum_state: "正", momentum_daily_change: 0.2 }), "正动能增强");
+assert.strictEqual(api.momentumStrengthLabel({ current_momentum_state: "负", momentum_daily_change: -0.2 }), "负动能增强");
 assert.strictEqual(JSON.stringify(api.rankMomentumRows(api.momentumRowsForCurrentDate(), "positive").map((row) => row.asset_code)), JSON.stringify(["CHEM1"]));
 api.setMomentumState("负动能");
 assert.strictEqual(JSON.stringify(api.filterMomentumRows().map((row) => row.asset_code)), JSON.stringify(["SHORTDOM"]));

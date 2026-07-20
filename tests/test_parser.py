@@ -3,6 +3,7 @@ from zipfile import ZipFile, ZIP_DEFLATED
 
 from asset_tracker.parsers import (
     CANONICAL_COLUMNS,
+    COMBINED_CORE_SOURCE_COLUMNS,
     MOMENTUM_CANONICAL_COLUMNS,
     MOMENTUM_SOURCE_COLUMNS,
     SOURCE_COLUMNS,
@@ -226,6 +227,59 @@ def test_parse_momentum_excel_extracts_typed_columns(tmp_path):
     assert parsed.rows[0]["current_momentum_state"] == "正动能"
     assert parsed.rows[0]["momentum_value"] == 1.25
     assert parsed.rows[0]["momentum_daily_change"] == 0.35
+
+
+def test_parse_combined_core_excel_extracts_core_and_inline_momentum(tmp_path):
+    workbook = tmp_path / "26-07-20 数据总表（趋势识别＋相对比价＋资金监控＋动能）（核心数据集）.xlsx"
+    values_by_column = {
+        "代码": "SPY",
+        "标的名称": "SPDR S&P 500 ETF Trust",
+        "相对强度": 105.5,
+        "强度动量": 103.2,
+        "当前比价状态持续时间": 2,
+        "当前比价状态": "lead",
+        "当前比价状态涨幅": 2.4,
+        "此前比价状态": "Improving",
+        "此前比价状态涨幅": 1.2,
+        "此前比价状态持续时间": 5,
+        "日级别趋势": "上行趋势",
+        "日级别趋势持续时间": 1,
+        "周级别趋势": "上行趋势",
+        "周级别趋势持续时间": 2,
+        "月级别趋势": "上行趋势",
+        "月级别趋势持续时间": 3,
+        "收盘价对比60日位置": 0.75,
+        "当前杠杆资金状态持续时间": 1,
+        "当前杠杆资金状态": "加杠杆",
+        "当前杠杆资金状态涨幅": 1.5,
+        "此前杠杆资金状态": "去杠杆",
+        "此前杠杆资金状态涨幅": -0.8,
+        "杠杆资金数值": 88.2,
+        "杠杆资金相比前日变动": 2.1,
+        "当前动能状态持续时间": 1,
+        "当前动能状态": "正",
+        "当前动能状态累积涨跌幅": 2.5,
+        "此前动能状态": "打点",
+        "此前动能状态累积涨跌幅": 0.2,
+        "动能数值": 1.25,
+        "动能数值相比前日变动": 0.35,
+    }
+    _write_minimal_xlsx(
+        workbook,
+        [
+            COMBINED_CORE_SOURCE_COLUMNS,
+            [values_by_column[column] for column in COMBINED_CORE_SOURCE_COLUMNS],
+        ],
+    )
+
+    parsed = parse_dataset_file(workbook)
+
+    assert parsed.metadata.dataset_type == "core"
+    assert parsed.row_count == 1
+    assert parsed.rows[0]["early_turn"] is None
+    assert parsed.rows[0]["current_momentum_state_duration"] == 1
+    assert parsed.rows[0]["current_momentum_state"] == "正"
+    assert parsed.rows[0]["momentum_value"] == 1.25
 
 
 def _write_minimal_xlsx(path, rows):

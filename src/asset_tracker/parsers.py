@@ -91,6 +91,70 @@ MOMENTUM_CANONICAL_COLUMNS = [
     "momentum_daily_change",
 ]
 
+COMBINED_CORE_SOURCE_COLUMNS = [
+    "代码",
+    "标的名称",
+    "相对强度",
+    "强度动量",
+    "当前比价状态持续时间",
+    "当前比价状态",
+    "当前比价状态涨幅",
+    "此前比价状态",
+    "此前比价状态涨幅",
+    "此前比价状态持续时间",
+    "日级别趋势",
+    "日级别趋势持续时间",
+    "周级别趋势",
+    "周级别趋势持续时间",
+    "月级别趋势",
+    "月级别趋势持续时间",
+    "收盘价对比60日位置",
+    "当前杠杆资金状态持续时间",
+    "当前杠杆资金状态",
+    "当前杠杆资金状态涨幅",
+    "此前杠杆资金状态",
+    "此前杠杆资金状态涨幅",
+    "杠杆资金数值",
+    "杠杆资金相比前日变动",
+    "当前动能状态持续时间",
+    "当前动能状态",
+    "当前动能状态累积涨跌幅",
+    "此前动能状态",
+    "此前动能状态累积涨跌幅",
+    "动能数值",
+    "动能数值相比前日变动",
+]
+
+COMBINED_CORE_CANONICAL_COLUMNS = [
+    "asset_code",
+    "asset_name",
+    "relative_strength",
+    "strength_momentum",
+    "relative_state_duration",
+    "relative_state",
+    "relative_state_return",
+    "previous_relative_state",
+    "previous_relative_state_return",
+    "previous_relative_state_duration",
+    "day_trend",
+    "day_trend_duration",
+    "week_trend",
+    "week_trend_duration",
+    "month_trend",
+    "month_trend_duration",
+    "close_position_60d",
+    "capital_state_duration",
+    "capital_state",
+    "capital_state_return",
+    "previous_capital_state",
+    "previous_capital_state_return",
+    "capital_value",
+    "capital_daily_change",
+    *MOMENTUM_CANONICAL_COLUMNS[2:],
+]
+
+COMBINED_CORE_OUTPUT_COLUMNS = [*CANONICAL_COLUMNS, *MOMENTUM_CANONICAL_COLUMNS[2:]]
+
 COLUMN_MAP = dict(zip(SOURCE_COLUMNS, CANONICAL_COLUMNS))
 
 INTEGER_FIELDS = {
@@ -220,6 +284,24 @@ def _parse_excel(path: Path, dataset_type: str) -> list[dict[str, Any]]:
             MOMENTUM_INTEGER_FIELDS,
             MOMENTUM_FLOAT_FIELDS,
         )
+    if dataset_type == "core":
+        try:
+            rows = _parse_excel_table(
+                path,
+                COMBINED_CORE_SOURCE_COLUMNS,
+                COMBINED_CORE_CANONICAL_COLUMNS,
+                INTEGER_FIELDS | MOMENTUM_INTEGER_FIELDS,
+                FLOAT_FIELDS | MOMENTUM_FLOAT_FIELDS,
+            )
+            return [
+                {
+                    column: (None if column == "early_turn" else row.get(column))
+                    for column in COMBINED_CORE_OUTPUT_COLUMNS
+                }
+                for row in rows
+            ]
+        except ValueError:
+            pass
     return _parse_excel_table(path, SOURCE_COLUMNS, CANONICAL_COLUMNS, INTEGER_FIELDS, FLOAT_FIELDS)
 
 

@@ -194,3 +194,55 @@ def test_momentum_dataset_is_stored_separately_and_idempotently(tmp_path):
     assert row["current_momentum_state"] == "正动能"
     assert row["momentum_value"] == 1.25
     assert db.get_momentum_history()[0]["dataset_date"] == "2026-07-17"
+
+
+def test_core_dataset_with_inline_momentum_populates_both_observation_tables(tmp_path):
+    db = AssetDatabase(tmp_path / "signals.sqlite")
+    db.initialize()
+    row = {
+        "asset_code": "SPY",
+        "asset_name": "SPDR S&P 500 ETF Trust",
+        "day_trend": "上行趋势",
+        "day_trend_duration": 1,
+        "week_trend": "上行趋势",
+        "week_trend_duration": 2,
+        "month_trend": "上行趋势",
+        "month_trend_duration": 3,
+        "close_position_60d": 0.75,
+        "relative_strength": 105.5,
+        "strength_momentum": 103.2,
+        "early_turn": None,
+        "relative_state_duration": 2,
+        "relative_state": "lead",
+        "relative_state_return": 2.4,
+        "previous_relative_state": "Improving",
+        "previous_relative_state_return": 1.2,
+        "previous_relative_state_duration": 5,
+        "capital_state_duration": 1,
+        "capital_state": "加杠杆",
+        "capital_state_return": 1.5,
+        "previous_capital_state": "去杠杆",
+        "previous_capital_state_return": -0.8,
+        "capital_value": 88.2,
+        "capital_daily_change": 2.1,
+        "current_momentum_state_duration": 1,
+        "current_momentum_state": "正",
+        "current_momentum_state_return": 2.5,
+        "previous_momentum_state": "打点",
+        "previous_momentum_state_return": 0.2,
+        "momentum_value": 1.25,
+        "momentum_daily_change": 0.35,
+    }
+    parsed = ParsedDataset(
+        metadata=DatasetMetadata(date(2026, 7, 20), "core"),
+        source_path=Path("combined-core.xlsx"),
+        source_hash="combined-core-hash",
+        rows=[row],
+    )
+
+    db.import_parsed_dataset(parsed, parsed.source_path)
+
+    assert db.get_observations_for_date("2026-07-20", "core")[0]["early_turn"] is None
+    momentum = db.get_momentum_for_date("2026-07-20")[0]
+    assert momentum["current_momentum_state"] == "正"
+    assert momentum["momentum_value"] == 1.25

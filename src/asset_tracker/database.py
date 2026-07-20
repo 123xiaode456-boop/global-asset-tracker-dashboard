@@ -263,6 +263,23 @@ class AssetDatabase:
                         "imported_at": imported_at,
                     }
                     _insert_observation(connection, "observations", OBSERVATION_COLUMNS, observation)
+                    if _has_inline_momentum(row):
+                        momentum_observation = {
+                            "dataset_date": dataset_date,
+                            "source_row_number": row_number,
+                            "asset_key": asset_key,
+                            **{column: row.get(column) for column in MOMENTUM_CANONICAL_COLUMNS},
+                            "asset_name_cn": translation.name_cn,
+                            "asset_name_translation_status": translation.status,
+                            "source_file_hash": parsed.source_hash,
+                            "imported_at": imported_at,
+                        }
+                        _insert_observation(
+                            connection,
+                            "momentum_observations",
+                            MOMENTUM_OBSERVATION_COLUMNS,
+                            momentum_observation,
+                        )
 
             connection.execute(
                 """
@@ -619,6 +636,10 @@ def _insert_observation(
         f"INSERT OR REPLACE INTO {table_name} ({column_sql}) VALUES ({placeholders})",
         values,
     )
+
+
+def _has_inline_momentum(row: dict[str, Any]) -> bool:
+    return all(column in row for column in MOMENTUM_CANONICAL_COLUMNS[2:])
 
 
 def _ensure_column(connection: sqlite3.Connection, table_name: str, column_name: str, definition: str) -> None:

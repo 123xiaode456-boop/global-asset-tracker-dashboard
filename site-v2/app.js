@@ -544,7 +544,7 @@ function momentumRowsForCurrentDate() {
 function filterMomentumRows(rows = momentumRowsForCurrentDate()) {
   const query = text(state.momentumSearch).toLowerCase();
   return rows.filter((row) => {
-    const stateMatches = state.momentumState === "all" || text(row.current_momentum_state) === state.momentumState;
+    const stateMatches = state.momentumState === "all" || momentumStateKind(row) === state.momentumState;
     const searchMatches =
       !query ||
       [row.asset_code, row.asset_name_cn, row.asset_name, row.asset_key]
@@ -562,35 +562,38 @@ function setMomentumSearch(value) {
 }
 
 function setMomentumState(value) {
-  if (!["all", "正动能", "负动能", "打点"].includes(value)) return;
-  state.momentumState = value;
+  const normalized = ["all", "positive", "negative", "dot"].includes(value)
+    ? value
+    : momentumStateKind({ current_momentum_state: value });
+  if (!["all", "positive", "negative", "dot"].includes(normalized)) return;
+  state.momentumState = normalized;
   renderMomentum();
 }
 
 function momentumStrengthLabel(row) {
-  const stateName = text(row.current_momentum_state);
+  const stateKind = momentumStateKind(row);
   const change = number(row.momentum_daily_change);
-  if (stateName === "正动能") {
+  if (stateKind === "positive") {
     if (change > 0) return "正动能增强";
     if (change < 0) return "正动能减弱";
     return "正动能不变";
   }
-  if (stateName === "负动能") {
+  if (stateKind === "negative") {
     if (change < 0) return "负动能增强";
     if (change > 0) return "负动能减弱";
     return "负动能不变";
   }
-  if (stateName === "打点") return "动能靠近零轴";
+  if (stateKind === "dot") return "动能靠近零轴";
   return "";
 }
 
 function rankMomentumRows(rows, direction) {
   const filtered = rows.filter((row) => {
-    const stateName = text(row.current_momentum_state);
+    const stateKind = momentumStateKind(row);
     const change = number(row.momentum_daily_change);
     return direction === "positive"
-      ? stateName === "正动能" && change > 0
-      : stateName === "负动能" && change < 0;
+      ? stateKind === "positive" && change > 0
+      : stateKind === "negative" && change < 0;
   });
   filtered.sort((a, b) => {
     const changeOrder = direction === "positive"
@@ -611,9 +614,9 @@ function renderMomentum() {
   });
 
   const counts = {
-    positive: allRows.filter((row) => text(row.current_momentum_state) === "正动能").length,
-    negative: allRows.filter((row) => text(row.current_momentum_state) === "负动能").length,
-    dot: allRows.filter((row) => text(row.current_momentum_state) === "打点").length,
+    positive: allRows.filter((row) => momentumStateKind(row) === "positive").length,
+    negative: allRows.filter((row) => momentumStateKind(row) === "negative").length,
+    dot: allRows.filter((row) => momentumStateKind(row) === "dot").length,
     fresh: allRows.filter((row) => number(row.current_momentum_state_duration) === 1).length,
   };
   document.querySelector("#momentumMetrics").innerHTML = [
@@ -652,12 +655,12 @@ function renderMomentum() {
 
 function drawMomentumScatter(rows) {
   const stateConfig = {
-    "正动能": { color: "#ff5c7a", label: "正动能" },
-    "负动能": { color: "#2ecc71", label: "负动能" },
-    "打点": { color: "#f2c94c", label: "打点" },
+    positive: { color: "#ff5c7a", label: "正动能" },
+    negative: { color: "#2ecc71", label: "负动能" },
+    dot: { color: "#f2c94c", label: "打点" },
   };
-  const traces = Object.entries(stateConfig).map(([stateName, config]) => {
-    const items = rows.filter((row) => text(row.current_momentum_state) === stateName);
+  const traces = Object.entries(stateConfig).map(([stateKind, config]) => {
+    const items = rows.filter((row) => momentumStateKind(row) === stateKind);
     return {
       type: "scatter",
       mode: "markers",
@@ -1148,7 +1151,15 @@ function rowNeedsHighlight(row) {
 }
 
 function momentumStateClass(value) {
-  return { "正动能": "positive", "负动能": "negative", "打点": "dot" }[text(value)] || "neutral";
+  return momentumStateKind({ current_momentum_state: value }) || "neutral";
+}
+
+function momentumStateKind(row) {
+  const value = text(row?.current_momentum_state);
+  if (["正", "正动能"].includes(value)) return "positive";
+  if (["负", "负动能"].includes(value)) return "negative";
+  if (value === "打点") return "dot";
+  return "";
 }
 
 function decisionLabel(row) {
