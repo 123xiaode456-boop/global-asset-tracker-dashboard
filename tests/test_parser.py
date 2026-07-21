@@ -26,9 +26,11 @@ def test_detects_dataset_date_and_type_from_filename():
 
 def test_detects_domestic_main_and_momentum_dataset_types():
     domestic = detect_metadata("26-07-17 数据总表（国内主连）（趋势识别＋相对比价＋资金监控）（测试）.xlsx")
+    mainland = detect_metadata("26-07-21 数据总表（趋势识别＋相对比价＋资金监控＋动能）（内地主连）.xlsx")
     momentum = detect_metadata("26-07-17 动量状态（测试）（核心数据集）.xlsx")
 
     assert domestic.dataset_type == "domestic_main"
+    assert mainland.dataset_type == "domestic_main"
     assert momentum.dataset_type == "momentum"
 
 
@@ -280,6 +282,37 @@ def test_parse_combined_core_excel_extracts_core_and_inline_momentum(tmp_path):
     assert parsed.rows[0]["current_momentum_state_duration"] == 1
     assert parsed.rows[0]["current_momentum_state"] == "正"
     assert parsed.rows[0]["momentum_value"] == 1.25
+
+
+def test_parse_full_combined_excel_preserves_early_turn_for_core_and_domestic_main(tmp_path):
+    headers = [*SOURCE_COLUMNS, *[
+        "当前动能状态持续时间",
+        "当前动能状态",
+        "当前动能状态累积涨跌幅",
+        "此前动能状态",
+        "此前动能状态累积涨跌幅",
+        "动能数值",
+        "动能数值相比前日变动",
+    ]]
+    base_values = [
+        "SPY", "SPDR S&P 500 ETF Trust", "上行趋势", 1, "上行趋势", 2,
+        "上行趋势", 3, 0.75, 105.5, 103.2, 101.1, 2, "lead", 2.4,
+        "Improving", 1.2, 5, 1, "加杠杆", 1.5, "去杠杆", -0.8, 88.2, 2.1,
+        1, "正", 2.5, "打点", 0.2, 1.25, 0.35,
+    ]
+    core = tmp_path / "26-07-21 数据总表（趋势识别＋相对比价＋资金监控＋动能）（核心数据集）.xlsx"
+    domestic = tmp_path / "26-07-21 数据总表（趋势识别＋相对比价＋资金监控＋动能）（内地主连）.xlsx"
+    _write_minimal_xlsx(core, [headers, base_values])
+    _write_minimal_xlsx(domestic, [headers, ["AL8", "豆一主连", *base_values[2:]]])
+
+    parsed_core = parse_dataset_file(core)
+    parsed_domestic = parse_dataset_file(domestic)
+
+    assert parsed_core.rows[0]["early_turn"] == 101.1
+    assert parsed_core.rows[0]["current_momentum_state"] == "正"
+    assert parsed_domestic.metadata.dataset_type == "domestic_main"
+    assert parsed_domestic.rows[0]["early_turn"] == 101.1
+    assert parsed_domestic.rows[0]["momentum_value"] == 1.25
 
 
 def _write_minimal_xlsx(path, rows):

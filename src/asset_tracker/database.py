@@ -25,6 +25,7 @@ OBSERVATION_COLUMNS = [
 
 MOMENTUM_OBSERVATION_COLUMNS = [
     "dataset_date",
+    "dataset_type",
     "source_row_number",
     "asset_key",
     *MOMENTUM_CANONICAL_COLUMNS,
@@ -129,6 +130,30 @@ class AssetDatabase:
                 CREATE INDEX IF NOT EXISTS idx_momentum_observations_asset_date
                 ON momentum_observations(asset_key, dataset_date);
 
+                CREATE TABLE IF NOT EXISTS momentum_observations_v2 (
+                    dataset_date TEXT NOT NULL,
+                    dataset_type TEXT NOT NULL,
+                    source_row_number INTEGER NOT NULL,
+                    asset_key TEXT NOT NULL,
+                    asset_code TEXT NOT NULL,
+                    asset_name TEXT NOT NULL,
+                    asset_name_cn TEXT,
+                    asset_name_translation_status TEXT,
+                    current_momentum_state_duration INTEGER,
+                    current_momentum_state TEXT,
+                    current_momentum_state_return REAL,
+                    previous_momentum_state TEXT,
+                    previous_momentum_state_return REAL,
+                    momentum_value REAL,
+                    momentum_daily_change REAL,
+                    source_file_hash TEXT NOT NULL,
+                    imported_at TEXT NOT NULL,
+                    PRIMARY KEY (dataset_date, dataset_type, source_row_number)
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_momentum_observations_v2_asset_date
+                ON momentum_observations_v2(asset_key, dataset_date);
+
                 CREATE TABLE IF NOT EXISTS import_logs (
                     file_hash TEXT PRIMARY KEY,
                     file_name TEXT NOT NULL,
@@ -190,6 +215,7 @@ class AssetDatabase:
             )
             _ensure_column(connection, "observations", "asset_name_cn", "TEXT")
             _ensure_column(connection, "observations", "asset_name_translation_status", "TEXT")
+            _migrate_momentum_observations(connection)
 
     def import_parsed_dataset(self, parsed: ParsedDataset, source_path: str | Path) -> ImportResult:
         dataset_date = parsed.metadata.dataset_date.isoformat()
@@ -236,6 +262,7 @@ class AssetDatabase:
                 if dataset_type == "momentum":
                     observation = {
                         "dataset_date": dataset_date,
+                        "dataset_type": "core",
                         "source_row_number": row_number,
                         "asset_key": asset_key,
                         **row,
@@ -246,7 +273,7 @@ class AssetDatabase:
                     }
                     _insert_observation(
                         connection,
-                        "momentum_observations",
+                        "momentum_observations_v2",
                         MOMENTUM_OBSERVATION_COLUMNS,
                         observation,
                     )
@@ -266,6 +293,7 @@ class AssetDatabase:
                     if _has_inline_momentum(row):
                         momentum_observation = {
                             "dataset_date": dataset_date,
+                            "dataset_type": dataset_type,
                             "source_row_number": row_number,
                             "asset_key": asset_key,
                             **{column: row.get(column) for column in MOMENTUM_CANONICAL_COLUMNS},
@@ -276,7 +304,7 @@ class AssetDatabase:
                         }
                         _insert_observation(
                             connection,
-                            "momentum_observations",
+                            "momentum_observations_v2",
                             MOMENTUM_OBSERVATION_COLUMNS,
                             momentum_observation,
                         )
@@ -376,7 +404,7 @@ class AssetDatabase:
     def list_momentum_dates(self) -> list[str]:
         with self.connect() as connection:
             rows = connection.execute(
-                "SELECT DISTINCT dataset_date FROM momentum_observations ORDER BY dataset_date"
+                "SELECT DISTINCT dataset_date FROM momentum_observations_v2 ORDER BY dataset_date"
             ).fetchall()
             return [row[0] for row in rows]
 
@@ -384,9 +412,10 @@ class AssetDatabase:
         with self.connect() as connection:
             rows = connection.execute(
                 """
-                SELECT * FROM momentum_observations
+                SELECT * FROM momentum_observations_v2
                 WHERE dataset_date = ?
-                ORDER BY source_row_number
+                ORDER BY CASE dataset_type WHEN 'core' THEN 0 WHEN 'domestic_main' THEN 1 ELSE 2 END,
+                         source_row_number
                 """,
                 (dataset_date,),
             ).fetchall()
@@ -396,8 +425,8 @@ class AssetDatabase:
         with self.connect() as connection:
             rows = connection.execute(
                 """
-                SELECT * FROM momentum_observations
-                ORDER BY asset_key, dataset_date, source_row_number
+                SELECT * FROM momentum_observations_v2
+                ORDER BY asset_key, dataset_date, dataset_type, source_row_number
                 """
             ).fetchall()
             return [_row_to_dict(row) for row in rows]
@@ -535,13 +564,13 @@ class AssetDatabase:
                 )
                 updated_observations += 1
             momentum_rows = connection.execute(
-                "SELECT rowid, asset_code, asset_name FROM momentum_observations"
+                "SELECT rowid, asset_code, asset_name FROM momentum_observations_v2"
             ).fetchall()
             for row in momentum_rows:
                 translation = translate_asset_name(row["asset_code"], row["asset_name"])
                 connection.execute(
                     """
-                    UPDATE momentum_observations
+                    UPDATE momentum_observations_v2
                     SET asset_name_cn = ?, asset_name_translation_status = ?
                     WHERE rowid = ?
                     """,
@@ -640,6 +669,29 @@ def _insert_observation(
 
 def _has_inline_momentum(row: dict[str, Any]) -> bool:
     return all(column in row for column in MOMENTUM_CANONICAL_COLUMNS[2:])
+
+
+def _migrate_momentum_observations(connection: sqlite3.Connection) -> None:
+    connection.execute(
+        """
+        INSERT OR IGNORE INTO momentum_observations_v2 (
+            dataset_date, dataset_type, source_row_number, asset_key,
+            asset_code, asset_name, current_momentum_state_duration,
+            current_momentum_state, current_momentum_state_return,
+            previous_momentum_state, previous_momentum_state_return,
+            momentum_value, momentum_daily_change, asset_name_cn,
+            asset_name_translation_status, source_file_hash, imported_at
+        )
+        SELECT
+            dataset_date, 'core', source_row_number, asset_key,
+            asset_code, asset_name, current_momentum_state_duration,
+            current_momentum_state, current_momentum_state_return,
+            previous_momentum_state, previous_momentum_state_return,
+            momentum_value, momentum_daily_change, asset_name_cn,
+            asset_name_translation_status, source_file_hash, imported_at
+        FROM momentum_observations
+        """
+    )
 
 
 def _ensure_column(connection: sqlite3.Connection, table_name: str, column_name: str, definition: str) -> None:

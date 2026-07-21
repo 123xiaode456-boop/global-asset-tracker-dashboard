@@ -155,6 +155,19 @@ COMBINED_CORE_CANONICAL_COLUMNS = [
 
 COMBINED_CORE_OUTPUT_COLUMNS = [*CANONICAL_COLUMNS, *MOMENTUM_CANONICAL_COLUMNS[2:]]
 
+INLINE_MOMENTUM_SOURCE_COLUMNS = [
+    *SOURCE_COLUMNS,
+    "当前动能状态持续时间",
+    "当前动能状态",
+    "当前动能状态累积涨跌幅",
+    "此前动能状态",
+    "此前动能状态累积涨跌幅",
+    "动能数值",
+    "动能数值相比前日变动",
+]
+
+INLINE_MOMENTUM_CANONICAL_COLUMNS = [*CANONICAL_COLUMNS, *MOMENTUM_CANONICAL_COLUMNS[2:]]
+
 COLUMN_MAP = dict(zip(SOURCE_COLUMNS, CANONICAL_COLUMNS))
 
 INTEGER_FIELDS = {
@@ -216,7 +229,7 @@ def detect_metadata(path: str | Path) -> DatasetMetadata:
 
     if "动量状态" in source.name:
         dataset_type = "momentum"
-    elif "国内主连" in source.name:
+    elif "国内主连" in source.name or "内地主连" in source.name:
         dataset_type = "domestic_main"
     elif "核心数据集" in source.name:
         dataset_type = "core"
@@ -284,7 +297,17 @@ def _parse_excel(path: Path, dataset_type: str) -> list[dict[str, Any]]:
             MOMENTUM_INTEGER_FIELDS,
             MOMENTUM_FLOAT_FIELDS,
         )
-    if dataset_type == "core":
+    if dataset_type in {"core", "domestic_main"}:
+        try:
+            return _parse_excel_table(
+                path,
+                INLINE_MOMENTUM_SOURCE_COLUMNS,
+                INLINE_MOMENTUM_CANONICAL_COLUMNS,
+                INTEGER_FIELDS | MOMENTUM_INTEGER_FIELDS,
+                FLOAT_FIELDS | MOMENTUM_FLOAT_FIELDS,
+            )
+        except ValueError:
+            pass
         try:
             rows = _parse_excel_table(
                 path,

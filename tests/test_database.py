@@ -246,3 +246,68 @@ def test_core_dataset_with_inline_momentum_populates_both_observation_tables(tmp
     momentum = db.get_momentum_for_date("2026-07-20")[0]
     assert momentum["current_momentum_state"] == "正"
     assert momentum["momentum_value"] == 1.25
+
+
+def test_core_and_domestic_inline_momentum_do_not_overwrite_same_date_rows(tmp_path):
+    db = AssetDatabase(tmp_path / "signals.sqlite")
+    db.initialize()
+    core_row = _inline_momentum_row("SPY", "SPDR S&P 500 ETF Trust", "正")
+    domestic_row = _inline_momentum_row("AL8", "豆一主连", "负")
+    core = ParsedDataset(
+        metadata=DatasetMetadata(date(2026, 7, 21), "core"),
+        source_path=Path("core.xlsx"),
+        source_hash="core-inline-momentum",
+        rows=[core_row],
+    )
+    domestic = ParsedDataset(
+        metadata=DatasetMetadata(date(2026, 7, 21), "domestic_main"),
+        source_path=Path("domestic.xlsx"),
+        source_hash="domestic-inline-momentum",
+        rows=[domestic_row],
+    )
+
+    db.import_parsed_dataset(core, core.source_path)
+    db.import_parsed_dataset(domestic, domestic.source_path)
+
+    momentum = db.get_momentum_for_date("2026-07-21")
+    assert [(row["dataset_type"], row["asset_code"]) for row in momentum] == [
+        ("core", "SPY"),
+        ("domestic_main", "AL8"),
+    ]
+
+
+def _inline_momentum_row(asset_code: str, asset_name: str, momentum_state: str) -> dict:
+    return {
+        "asset_code": asset_code,
+        "asset_name": asset_name,
+        "day_trend": "上行趋势",
+        "day_trend_duration": 1,
+        "week_trend": "上行趋势",
+        "week_trend_duration": 2,
+        "month_trend": "上行趋势",
+        "month_trend_duration": 3,
+        "close_position_60d": 0.75,
+        "relative_strength": 105.5,
+        "strength_momentum": 103.2,
+        "early_turn": 101.1,
+        "relative_state_duration": 2,
+        "relative_state": "lead",
+        "relative_state_return": 2.4,
+        "previous_relative_state": "Improving",
+        "previous_relative_state_return": 1.2,
+        "previous_relative_state_duration": 5,
+        "capital_state_duration": 1,
+        "capital_state": "加杠杆",
+        "capital_state_return": 1.5,
+        "previous_capital_state": "去杠杆",
+        "previous_capital_state_return": -0.8,
+        "capital_value": 88.2,
+        "capital_daily_change": 2.1,
+        "current_momentum_state_duration": 1,
+        "current_momentum_state": momentum_state,
+        "current_momentum_state_return": 2.5,
+        "previous_momentum_state": "打点",
+        "previous_momentum_state_return": 0.2,
+        "momentum_value": 1.25 if momentum_state == "正" else -1.25,
+        "momentum_daily_change": 0.35 if momentum_state == "正" else -0.35,
+    }
