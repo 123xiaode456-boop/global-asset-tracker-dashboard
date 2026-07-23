@@ -6,7 +6,7 @@ from typing import Any
 
 import plotly.graph_objects as go
 
-from .analysis import QuadrantPoint, build_quadrant_trajectory
+from .analysis import QuadrantPoint, build_quadrant_trajectory, infer_quadrant_centers
 from .asset_names import display_asset_name
 from .database import AssetDatabase
 from .domestic_futures import domestic_futures_group
@@ -138,6 +138,13 @@ def load_futures_commodity_trajectories(
     if not selected_date:
         return []
     rows = db.get_observations_for_date(selected_date, dataset_type)
+    center_rows = [
+        row
+        for date_key in db.list_dataset_dates(dataset_type)
+        if date_key <= selected_date
+        for row in db.get_observations_for_date(date_key, dataset_type)
+    ]
+    centers_by_date = infer_quadrant_centers(center_rows)
     latest_by_key = {
         str(row.get("asset_key") or f"{row.get('asset_code')}|{row.get('asset_name')}"): row
         for row in rows
@@ -150,7 +157,8 @@ def load_futures_commodity_trajectories(
         history = db.get_asset_history(asset_key)
         if dataset_type:
             history = [item for item in history if item.get("dataset_type") == dataset_type]
-        points = build_quadrant_trajectory(history)
+        history = [item for item in history if str(item.get("dataset_date") or "") <= selected_date]
+        points = build_quadrant_trajectory(history, centers_by_date)
         if not points:
             continue
         trajectories.append(
@@ -197,8 +205,8 @@ def futures_quadrant_figure(
                     "品种=%{customdata[2]}<br>"
                     "日期=%{customdata[3]}<br>"
                     "象限=%{customdata[4]}<br>"
-                    "相对强度-100=%{x:.2f}<br>"
-                    "强度动量-100=%{y:.2f}<extra></extra>"
+                    "相对强度居中坐标=%{x:.2f}<br>"
+                    "强度动量居中坐标=%{y:.2f}<extra></extra>"
                 ),
             )
         )
@@ -215,8 +223,8 @@ def futures_quadrant_figure(
         height=height,
         showlegend=showlegend,
         margin=dict(l=35, r=25, t=20, b=45),
-        xaxis_title="相对强度 - 100",
-        yaxis_title="强度动量 - 100",
+        xaxis_title="相对强度（按当日基准居中）",
+        yaxis_title="强度动量（按当日基准居中）",
         legend=dict(orientation="v", x=1.01, y=1.0, groupclick="toggleitem"),
     )
     fig.update_xaxes(range=[-axis_limit, axis_limit], zeroline=False)

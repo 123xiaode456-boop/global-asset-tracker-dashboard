@@ -4,7 +4,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from .analysis import QuadrantPoint, TradeDecision, build_quadrant_trajectory, classify_trade_decision
+from .analysis import (
+    QuadrantPoint,
+    TradeDecision,
+    build_quadrant_trajectory,
+    classify_trade_decision,
+    infer_quadrant_centers,
+)
 from .database import AssetDatabase
 from .market_data import guess_symbol_candidates
 from .rules import summarize_rows
@@ -140,6 +146,18 @@ def get_asset_panel_data(
     selected_date = dataset_date or (signal_history[-1]["dataset_date"] if signal_history else None)
     latest_signal = _select_signal_for_date(signal_history, selected_date)
     opportunity = _find_asset_opportunity(db, latest_signal, selected_date, dataset_type)
+    center_dataset_type = dataset_type or str((latest_signal or {}).get("dataset_type") or "core")
+    center_rows = [
+        row
+        for date_key in db.list_dataset_dates(center_dataset_type)
+        if selected_date is None or date_key <= selected_date
+        for row in db.get_observations_for_date(date_key, center_dataset_type)
+    ]
+    trajectory_history = [
+        row
+        for row in signal_history
+        if selected_date is None or str(row.get("dataset_date") or "") <= selected_date
+    ]
     return AssetPanelData(
         asset_code=asset_code,
         selected_date=selected_date,
@@ -149,7 +167,10 @@ def get_asset_panel_data(
         latest_signal=latest_signal,
         trade_decision=classify_trade_decision(latest_signal),
         opportunity=opportunity,
-        quadrant_trajectory=build_quadrant_trajectory(signal_history),
+        quadrant_trajectory=build_quadrant_trajectory(
+            trajectory_history,
+            infer_quadrant_centers(center_rows),
+        ),
     )
 
 

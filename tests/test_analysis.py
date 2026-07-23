@@ -1,4 +1,8 @@
-from asset_tracker.analysis import build_quadrant_trajectory, classify_trade_decision
+from asset_tracker.analysis import (
+    build_quadrant_trajectory,
+    classify_trade_decision,
+    infer_quadrant_centers,
+)
 
 
 def test_classify_trade_decision_maps_day_trend_to_action():
@@ -99,3 +103,36 @@ def test_build_quadrant_trajectory_keeps_one_point_per_date():
     assert len(trajectory) == 1
     assert trajectory[0].date == "2026-06-09"
     assert trajectory[0].quadrant == "Leading"
+
+
+def test_infer_quadrant_centers_supports_legacy_and_current_scales():
+    rows = [
+        {"dataset_date": "2026-07-17", "relative_strength": 105.0, "strength_momentum": 104.0, "relative_state": "lead"},
+        {"dataset_date": "2026-07-17", "relative_strength": 96.0, "strength_momentum": 103.0, "relative_state": "Improving"},
+        {"dataset_date": "2026-07-17", "relative_strength": 95.0, "strength_momentum": 94.0, "relative_state": "Lag"},
+        {"dataset_date": "2026-07-17", "relative_strength": 104.0, "strength_momentum": 97.0, "relative_state": "Weakening"},
+        {"dataset_date": "2026-07-23", "relative_strength": 60.0, "strength_momentum": 5.0, "relative_state": "lead"},
+        {"dataset_date": "2026-07-23", "relative_strength": 45.0, "strength_momentum": 8.0, "relative_state": "Improving"},
+        {"dataset_date": "2026-07-23", "relative_strength": 40.0, "strength_momentum": -3.0, "relative_state": "Lag"},
+        {"dataset_date": "2026-07-23", "relative_strength": 65.0, "strength_momentum": -4.0, "relative_state": "Weakening"},
+    ]
+
+    centers = infer_quadrant_centers(rows)
+
+    assert centers["2026-07-17"] == (100.0, 100.0)
+    assert centers["2026-07-23"] == (50.0, 0.0)
+
+
+def test_build_quadrant_trajectory_keeps_source_state_authoritative_after_scale_change():
+    history = [
+        {
+            "dataset_date": "2026-07-23",
+            "relative_strength": 45.68932921054105,
+            "strength_momentum": 13.22929928047039,
+            "relative_state": "Improving",
+        }
+    ]
+
+    point = build_quadrant_trajectory(history, {"2026-07-23": (50.0, 0.0)})[0]
+
+    assert (point.x, point.y, point.quadrant) == (-4.310671, 13.229299, "Improving")

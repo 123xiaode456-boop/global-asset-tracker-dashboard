@@ -43,7 +43,7 @@ def test_load_futures_commodity_trajectories_returns_daily_paths(tmp_path):
         date(2026, 6, 9),
         "day1",
         [
-            _row("GC1!", "Gold Futures", 95.0, 96.0),
+            {**_row("GC1!", "Gold Futures", 95.0, 96.0), "relative_state": "Lag"},
             _row("CU1!", "Copper Cathode Futures", 102.0, 104.0),
             _row("ES1!", "E-mini S&P 500 Futures", 101.0, 103.0),
         ],
@@ -53,7 +53,7 @@ def test_load_futures_commodity_trajectories_returns_daily_paths(tmp_path):
         date(2026, 6, 10),
         "day2",
         [
-            _row("GC1!", "Gold Futures", 98.0, 99.0),
+            {**_row("GC1!", "Gold Futures", 98.0, 99.0), "relative_state": "Lag"},
             _row("CU1!", "Copper Cathode Futures", 104.0, 106.0),
             _row("ES1!", "E-mini S&P 500 Futures", 102.0, 104.0),
         ],
@@ -65,6 +65,41 @@ def test_load_futures_commodity_trajectories_returns_daily_paths(tmp_path):
     assert [item.group for item in trajectories] == ["有色", "贵金属"]
     assert [point.date for point in trajectories[1].points] == ["2026-06-09", "2026-06-10"]
     assert [(point.x, point.y) for point in trajectories[1].points] == [(-5.0, -4.0), (-2.0, -1.0)]
+
+
+def test_load_futures_trajectory_infers_daily_center_and_excludes_future_points(tmp_path):
+    db = AssetDatabase(tmp_path / "signals.sqlite")
+    db.initialize()
+    _import_rows(
+        db,
+        date(2026, 7, 20),
+        "scale-transition-day",
+        [
+            {**_row("BRN1!", "Brent Crude Futures", 38.0, 47.0), "relative_state": "Improving"},
+            {**_row("JKM1!", "JKM LNG Futures", 60.0, 60.0), "relative_state": "lead"},
+            {**_row("GC1!", "Gold Futures", 40.0, 40.0), "relative_state": "Lag"},
+            {**_row("CU1!", "Copper Cathode Futures", 70.0, 45.0), "relative_state": "Weakening"},
+        ],
+    )
+    _import_rows(
+        db,
+        date(2026, 7, 21),
+        "new-scale-day",
+        [
+            {**_row("BRN1!", "Brent Crude Futures", 39.0, 9.0), "relative_state": "Improving"},
+            {**_row("JKM1!", "JKM LNG Futures", 61.0, 6.0), "relative_state": "lead"},
+            {**_row("GC1!", "Gold Futures", 41.0, -4.0), "relative_state": "Lag"},
+            {**_row("CU1!", "Copper Cathode Futures", 71.0, -5.0), "relative_state": "Weakening"},
+        ],
+    )
+
+    trajectories = load_futures_commodity_trajectories(db.path, dataset_date="2026-07-20")
+    brent = next(item for item in trajectories if item.asset_code == "BRN1!")
+
+    assert [point.date for point in brent.points] == ["2026-07-20"]
+    assert [(point.x, point.y, point.quadrant) for point in brent.points] == [
+        (-12.0, 3.0, "Improving")
+    ]
 
 
 def test_futures_quadrant_figure_draws_one_trace_per_futures_asset():

@@ -169,7 +169,7 @@ def test_asset_panel_data_uses_selected_date_for_decision_and_opportunity(tmp_pa
     assert panel.trade_decision.label == "可做多"
     assert panel.opportunity["decision_label"] == "可做多"
     assert panel.opportunity["rank"] == 1
-    assert [point.date for point in panel.quadrant_trajectory] == ["2026-06-09", "2026-06-10"]
+    assert [point.date for point in panel.quadrant_trajectory] == ["2026-06-09"]
 
 
 def test_asset_panel_data_merges_indicator_history_for_similar_same_code_names(tmp_path):

@@ -47,7 +47,7 @@ def test_quadrant_timeline_figure_uses_dates_as_x_axis():
 
     figure = _quadrant_timeline_figure(points)
 
-    assert [trace.name for trace in figure.data] == ["横轴坐标 RS-100", "纵轴坐标 动量-100"]
+    assert [trace.name for trace in figure.data] == ["横轴坐标（当日居中）", "纵轴坐标（当日居中）"]
     assert list(figure.data[0].x) == ["2026-06-09", "2026-06-10"]
     assert list(figure.data[0].y) == [-4.0, 5.0]
     assert list(figure.data[1].y) == [4.0, 3.0]

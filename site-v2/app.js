@@ -747,7 +747,7 @@ function drawQuadrantBundle(elementId, items, title) {
     text: item.points.map((point) => `${item.displayName} ${point.date}`),
     line: { width: 1.5, color: GROUP_COLORS[item.group] || "#8c959f" },
     marker: { size: 5 },
-    hovertemplate: "%{text}<br>相对强度-100=%{x:.2f}<br>强度动量-100=%{y:.2f}<extra></extra>",
+    hovertemplate: "%{text}<br>相对强度居中坐标=%{x:.2f}<br>强度动量居中坐标=%{y:.2f}<extra></extra>",
   }));
   Plotly.newPlot(
     elementId,
@@ -755,8 +755,8 @@ function drawQuadrantBundle(elementId, items, title) {
     {
       height: 430,
       margin: { l: 48, r: 20, t: 24, b: 44 },
-      xaxis: { title: "相对强度 - 100", range: [-axis, axis], zeroline: false },
-      yaxis: { title: "强度动量 - 100", range: [-axis, axis], zeroline: false, scaleanchor: "x", scaleratio: 1 },
+      xaxis: { title: "相对强度（按当日基准居中）", range: [-axis, axis], zeroline: false },
+      yaxis: { title: "强度动量（按当日基准居中）", range: [-axis, axis], zeroline: false, scaleanchor: "x", scaleratio: 1 },
       shapes: quadrantShapes(axis),
       annotations: quadrantAnnotations({ xAxis: axis, yAxis: axis, color: "rgba(128, 91, 0, 0.38)", size: 13 }).concat(
         chartTitleAnnotation(title)

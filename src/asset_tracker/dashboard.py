@@ -350,8 +350,8 @@ def _quadrant_figure(points: list[QuadrantPoint]) -> go.Figure:
     fig.update_layout(
         height=500,
         margin=dict(l=30, r=20, t=25, b=35),
-        xaxis_title="相对强度 - 100",
-        yaxis_title="强度动量 - 100",
+        xaxis_title="相对强度（按当日基准居中）",
+        yaxis_title="强度动量（按当日基准居中）",
         legend=dict(orientation="h"),
     )
     fig.update_xaxes(range=[-axis_limit, axis_limit], zeroline=False)
@@ -561,7 +561,7 @@ def _quadrant_timeline_figure(points: list[QuadrantPoint]) -> go.Figure:
             x=dates,
             y=[point.x for point in points],
             mode="lines+markers",
-            name="横轴坐标 RS-100",
+            name="横轴坐标（当日居中）",
             marker=dict(color="#0969da"),
         )
     )
@@ -570,7 +570,7 @@ def _quadrant_timeline_figure(points: list[QuadrantPoint]) -> go.Figure:
             x=dates,
             y=[point.y for point in points],
             mode="lines+markers",
-            name="纵轴坐标 动量-100",
+            name="纵轴坐标（当日居中）",
             marker=dict(color="#2da44e"),
         )
     )
