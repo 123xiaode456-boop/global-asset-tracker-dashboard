@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
@@ -12,6 +13,7 @@ from asset_tracker.dashboard_data import load_dashboard_snapshot
 from asset_tracker.database import AssetDatabase
 from asset_tracker.domestic_futures import domestic_futures_symbol, is_domestic_commodity_future
 from asset_tracker.futures_quadrant import load_futures_commodity_trajectories
+from asset_tracker.parsers import MOMENTUM_CANONICAL_COLUMNS
 from asset_tracker.rules import summarize_rows
 
 
@@ -32,15 +34,103 @@ def export_static_site(
     payload = build_static_payload(db_path, commodity_only=commodity_only)
     output = data_dir / "app-data.json"
     output.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    export_static_shards(payload, data_dir)
     return output
+
+
+def export_static_shards(payload: dict[str, Any], data_dir: str | Path) -> Path:
+    """Write the same logical dataset as small, lazy-loadable JSON files.
+
+    The monolithic ``app-data.json`` remains a local rollback artifact.  The
+    browser loads ``manifest.json`` and fetches the requested date/view only.
+    Repeated snapshot summaries and momentum history groupings are derivable
+    from the retained rows, so they are not duplicated in the shards.
+    """
+
+    data_dir = Path(data_dir)
+    for name in ("snapshots", "futures", "momentum"):
+        target = data_dir / name
+        if target.exists():
+            shutil.rmtree(target)
+
+    snapshot_files: dict[str, str] = {}
+    for key, snapshot in payload.get("snapshots", {}).items():
+        dataset_type, dataset_date = key.split("|", 1)
+        relative_path = Path("snapshots") / dataset_type / f"{dataset_date}.json"
+        _write_json(data_dir / relative_path, _compact_snapshot(snapshot))
+        snapshot_files[key] = relative_path.as_posix()
+
+    futures_files: dict[str, str] = {}
+    for dataset_date, items in payload.get("futuresByDate", {}).items():
+        relative_path = Path("futures") / f"{dataset_date}.json"
+        _write_json(data_dir / relative_path, items)
+        futures_files[dataset_date] = relative_path.as_posix()
+
+    momentum_files: dict[str, str] = {}
+    for dataset_date, rows in payload.get("momentumByDate", {}).items():
+        relative_path = Path("momentum") / f"{dataset_date}.json"
+        _write_json(data_dir / relative_path, rows)
+        momentum_files[dataset_date] = relative_path.as_posix()
+
+    _write_json(data_dir / "price-histories.json", payload.get("priceHistories", {}))
+    _write_json(data_dir / "price-coverage.json", payload.get("priceCoverage", {}))
+
+    momentum_rows = sum(len(rows) for rows in payload.get("momentumByDate", {}).values())
+    manifest = {
+        "formatVersion": 2,
+        "generatedAt": payload.get("generatedAt"),
+        "datasetTypes": payload.get("datasetTypes", []),
+        "datesByType": payload.get("datesByType", {}),
+        "momentumDates": payload.get("momentumDates", []),
+        "files": {
+            "snapshots": snapshot_files,
+            "futuresByDate": futures_files,
+            "momentumByDate": momentum_files,
+            "priceHistories": "price-histories.json",
+            "priceCoverage": "price-coverage.json",
+        },
+        "retainedData": {
+            "snapshotCount": len(snapshot_files),
+            "futuresDateCount": len(futures_files),
+            "momentumDateCount": len(momentum_files),
+            "momentumRowCount": momentum_rows,
+            "priceHistoryAssetCount": len(payload.get("priceHistories", {})),
+            "priceCoverageAssetCount": len(payload.get("priceCoverage", {})),
+        },
+        "derivedViews": {
+            "momentumHistoryByAsset": "derive from all momentumByDate shards",
+            "snapshotOpportunityLists": "derive from each snapshot latestRows",
+        },
+    }
+    manifest_path = data_dir / "manifest.json"
+    _write_json(manifest_path, manifest)
+    return manifest_path
+
+
+def _compact_snapshot(snapshot: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "latestDate": snapshot.get("latestDate"),
+        "assetCount": snapshot.get("assetCount"),
+        "latestCounts": snapshot.get("latestCounts", {}),
+        "latestRows": snapshot.get("latestRows", []),
+    }
+
+
+def _write_json(path: Path, payload: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(_clean(payload), ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 
 
 def build_static_payload(db_path: str | Path, commodity_only: bool = False) -> dict[str, Any]:
     db = AssetDatabase(db_path)
     db.initialize()
     all_snapshot = load_dashboard_snapshot(db_path)
-    dataset_types = ["core"] if commodity_only else all_snapshot.dataset_types
-    dataset_options: list[str | None] = ["core"] if commodity_only else [None, *dataset_types]
+    if commodity_only:
+        dataset_types = [dataset_type for dataset_type in ("core", "betting") if dataset_type in all_snapshot.dataset_types]
+        dataset_options: list[str | None] = list(dataset_types)
+    else:
+        dataset_types = all_snapshot.dataset_types
+        dataset_options = [None, *dataset_types]
 
     snapshots: dict[str, Any] = {}
     dates_by_type: dict[str, list[str]] = {}
@@ -52,6 +142,15 @@ def build_static_payload(db_path: str | Path, commodity_only: bool = False) -> d
         for dataset_date in base_snapshot.available_dates:
             snapshot = load_dashboard_snapshot(db_path, dataset_type, dataset_date)
             snapshot_payload = _snapshot_payload(snapshot)
+            if dataset_type:
+                snapshot_payload = _merge_momentum_rows(
+                    snapshot_payload,
+                    [
+                        row
+                        for row in db.get_momentum_for_date(dataset_date)
+                        if row.get("dataset_type") == dataset_type
+                    ],
+                )
             if dataset_type == "core":
                 snapshot_payload = _merge_domestic_main_rows(
                     snapshot_payload,
@@ -136,6 +235,24 @@ def _merge_domestic_main_rows(snapshot: dict[str, Any], domestic_rows: list[dict
     }
 
 
+def _merge_momentum_rows(snapshot: dict[str, Any], momentum_rows: list[dict[str, Any]]) -> dict[str, Any]:
+    if not momentum_rows:
+        return snapshot
+    momentum_by_key = {
+        str(row.get("asset_key") or f"{row.get('asset_code')}|{row.get('asset_name')}"): row
+        for row in momentum_rows
+    }
+    momentum_columns = [
+        column for column in MOMENTUM_CANONICAL_COLUMNS if column not in {"asset_code", "asset_name"}
+    ]
+    merged_rows = []
+    for row in snapshot["latestRows"]:
+        asset_key = str(row.get("asset_key") or f"{row.get('asset_code')}|{row.get('asset_name')}")
+        momentum = momentum_by_key.get(asset_key, {})
+        merged_rows.append({**row, **{column: momentum.get(column) for column in momentum_columns}})
+    return {**snapshot, "latestRows": merged_rows}
+
+
 def _futures_item_payload(item) -> dict[str, Any]:
     row = {"asset_code": item.asset_code, "asset_name_cn": item.display_name, "asset_name": item.display_name}
     symbol = domestic_futures_symbol(row)
@@ -158,8 +275,8 @@ def _filter_payload_to_commodities(payload: dict[str, Any], rows_for_prices: dic
         allowed_keys.update(str(item.get("assetKey") or "") for item in items)
     allowed_keys.discard("")
 
-    for asset_key in list(rows_for_prices):
-        if asset_key not in allowed_keys:
+    for asset_key, row in list(rows_for_prices.items()):
+        if row.get("dataset_type") != "betting" and asset_key not in allowed_keys:
             rows_for_prices.pop(asset_key, None)
 
 

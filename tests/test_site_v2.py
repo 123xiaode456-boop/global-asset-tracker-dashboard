@@ -10,16 +10,18 @@ NODE = Path.home() / ".cache" / "codex-runtimes" / "codex-primary-runtime" / "de
 def test_site_v2_index_cache_busts_app_script():
     html = (PROJECT_ROOT / "site-v2" / "index.html").read_text(encoding="utf-8")
 
-    assert '<script src="./app.js?v=20260723-quadrant-scale-fix"></script>' in html
+    assert '<script src="./app.js?v=20260827-lazy-shards"></script>' in html
+    assert 'data-view-target="etf"' in html
+    assert 'id="etfTable"' in html
 
 
-def test_site_v2_frontend_rules_with_node():
+def test_site_v2_frontend_rules_with_node(tmp_path):
     script = r"""
 const fs = require("fs");
 const vm = require("vm");
 const assert = require("assert");
 
-let source = fs.readFileSync(process.argv[1], "utf8");
+let source = fs.readFileSync(process.argv.at(-1), "utf8");
 source = source.replace(/\nmain\(\)\.catch\([\s\S]*?\);\s*$/, "\n");
 
 const context = {
@@ -98,6 +100,13 @@ globalThis.__api = {
   momentumStrengthLabel,
   momentumStateKind,
   rankMomentumRows,
+  etfRowsForCurrentDate,
+  filterEtfRows,
+  hasAnySignalBarOne,
+  rankEtfOpportunities,
+  setEtfFilter,
+  resetEtfFilters,
+  renderEtf,
   renderMomentum,
   drawKline,
   domesticCommodityRows,
@@ -115,8 +124,8 @@ globalThis.__api = {
 );
 
 const api = context.__api;
-assert.strictEqual(api.DATA_URL, "./data/app-data.json");
-assert.ok(api.currentDataUrl().startsWith("./data/app-data.json?v="));
+assert.strictEqual(api.DATA_URL, "./data/manifest.json");
+assert.ok(api.currentDataUrl().startsWith("./data/manifest.json?v="));
 const up = "上行趋势";
 const down = "下行趋势";
 const base = {
@@ -210,6 +219,8 @@ assert.strictEqual(relativePlot[2].autosize, true);
 assert.ok(relativePlot[2].height >= 740);
 assert.ok(relativePlot[2].shapes.length >= 6);
 const axisLines = relativePlot[2].shapes.filter((shape) => shape.type === "line");
+const quadrantRects = relativePlot[2].shapes.filter((shape) => shape.type === "rect");
+assert.ok(quadrantRects.every((shape) => [shape.x0, shape.x1, shape.y0, shape.y1].every(Number.isFinite)));
 assert.ok(axisLines.every((shape) => shape.layer === "above"));
 assert.ok(axisLines.every((shape) => shape.line.dash === "solid"));
 assert.ok(axisLines.every((shape) => shape.line.color === "#111111"));
@@ -238,8 +249,10 @@ assert.strictEqual(context.document.body.dataset.activeView, "trajectory");
 
 api.state.date = "2026-06-22";
 api.state.data = {
+  datasetTypes: ["core", "betting"],
   datesByType: {
     core: ["2026-05-20", "2026-05-23", "2026-06-01", "2026-06-10", "2026-06-22", "2026-07-03"],
+    betting: ["2026-08-03"],
   },
   snapshots: {
     "core|2026-05-23": {
@@ -270,7 +283,7 @@ api.state.data = {
         { asset_key: "GOLD1|Gold", asset_code: "GOLD1", day_trend: down, day_trend_duration: 8, week_trend: up, week_trend_duration: 9, month_trend: down, month_trend_duration: 10 },
       ],
     },
-        "core|2026-07-03": {
+    "core|2026-07-03": {
           latestDate: "2026-07-03",
           latestRows: [
         { asset_key: "CHEM1|Chem One", asset_code: "CHEM1", asset_name_cn: "化工一号", asset_name: "Chem One", relative_state: "lead", relative_state_duration: 3, relative_state_return: 2.5, capital_state: "加杠杆", day_trend: up, day_trend_duration: 3, week_trend: up, week_trend_duration: 4, month_trend: up, month_trend_duration: 5 },
@@ -281,6 +294,14 @@ api.state.data = {
         { asset_key: "UNMAPPED_LONG|Long", asset_code: "UNMAPPED_LONG", asset_name: "Unmapped Long", relative_state: "improving", capital_state: "加杠杆", day_trend: up, day_trend_duration: 2, week_trend: up, week_trend_duration: 3, month_trend: down, month_trend_duration: 4 },
         { asset_key: "UNMAPPED_SHORT|Short", asset_code: "UNMAPPED_SHORT", asset_name: "Unmapped Short", relative_state: "lag", capital_state: "去杠杆", day_trend: down, day_trend_duration: 2, week_trend: down, week_trend_duration: 3, month_trend: up, month_trend_duration: 4 },
         { asset_key: "NO_SIGNAL|No", asset_code: "NO_SIGNAL", asset_name: "No Signal", relative_state: "lead", capital_state: "去杠杆", day_trend: up, day_trend_duration: 2, week_trend: up, week_trend_duration: 3, month_trend: up, month_trend_duration: 4 },
+      ],
+    },
+    "betting|2026-08-03": {
+      latestDate: "2026-08-03",
+      latestRows: [
+        { asset_key: "159611|Power ETF", asset_code: "159611", asset_name_cn: "电力ETF", asset_name: "Power ETF", relative_state: "Improving", relative_state_duration: 2, relative_state_return: 3.1, capital_state: "加杠杆", capital_state_duration: 3, day_trend: up, day_trend_duration: 4, week_trend: up, week_trend_duration: 5, month_trend: up, month_trend_duration: 6, current_momentum_state: "正", current_momentum_state_duration: 2, momentum_value: 1.5, momentum_daily_change: 0.2 },
+        { asset_key: "512000|Short ETF", asset_code: "512000", asset_name_cn: "风险ETF", asset_name: "Short ETF", relative_state: "Lag", relative_state_duration: 1, relative_state_return: -2.2, capital_state: "去杠杆", capital_state_duration: 2, day_trend: down, day_trend_duration: 3, week_trend: down, week_trend_duration: 4, month_trend: down, month_trend_duration: 5, current_momentum_state: "负", current_momentum_state_duration: 1, momentum_value: -1.2, momentum_daily_change: -0.3 },
+        { asset_key: "SPY|SPDR ETF", asset_code: "SPY", asset_name_cn: "标普ETF", asset_name: "SPDR ETF", relative_state: "Weakening", relative_state_duration: 7, relative_state_return: 0.4, capital_state: "加杠杆", capital_state_duration: 8, day_trend: up, day_trend_duration: 9, week_trend: up, week_trend_duration: 10, month_trend: up, month_trend_duration: 11, current_momentum_state: "打点", current_momentum_state_duration: 3, momentum_value: 0, momentum_daily_change: 0.01 },
       ],
     },
   },
@@ -498,6 +519,22 @@ assert.strictEqual(JSON.stringify(api.SEARCH_COLUMNS.map((item) => item[0])), JS
 ]));
 assert.strictEqual(JSON.stringify(api.MA_WINDOWS), JSON.stringify([5, 10, 20, 60, 250]));
 
+api.selectView("etf");
+assert.strictEqual(api.selectedView(), "etf");
+assert.strictEqual(api.state.datasetKey, "betting");
+assert.strictEqual(api.state.date, "2026-08-03");
+assert.strictEqual(api.etfRowsForCurrentDate().length, 3);
+assert.strictEqual(JSON.stringify(api.rankEtfOpportunities(api.etfRowsForCurrentDate(), "long").map((row) => row.asset_code)), JSON.stringify(["159611"]));
+assert.strictEqual(JSON.stringify(api.rankEtfOpportunities(api.etfRowsForCurrentDate(), "short").map((row) => row.asset_code)), JSON.stringify(["512000"]));
+assert.strictEqual(api.hasAnySignalBarOne(api.etfRowsForCurrentDate()[1]), true);
+api.setEtfFilter("search", "电力");
+assert.strictEqual(JSON.stringify(api.filterEtfRows().map((row) => row.asset_code)), JSON.stringify(["159611"]));
+api.resetEtfFilters();
+assert.strictEqual(api.filterEtfRows().length, 3);
+assert.ok(context.__elements["#etfLongRank"].innerHTML.includes("159611"));
+assert.ok(context.__elements["#etfShortRank"].innerHTML.includes("512000"));
+assert.ok(context.__elements["#etfTable"].innerHTML.includes("SPY"));
+
 api.state.data = {
   priceHistories: {
     "AAA|Alpha": [{ bar_date: "2026-06-01", open: 1, high: 2, low: 1, close: 2, volume: 10 }],
@@ -520,7 +557,9 @@ const traceNames = context.__plots.at(-1)[1].map((trace) => trace.name);
 assert.strictEqual(JSON.stringify(traceNames), JSON.stringify(["K线", "MA5", "MA10", "MA20", "MA60", "MA250"]));
 assert.ok(api.toWeeklyBars(bars).length < bars.length);
 """
-    subprocess.run([str(NODE), "-e", script, str(PROJECT_ROOT / "site-v2" / "app.js")], check=True)
+    script_path = tmp_path / "site-v2-test.js"
+    script_path.write_text(script, encoding="utf-8")
+    subprocess.run([str(NODE), str(script_path), str(PROJECT_ROOT / "site-v2" / "app.js")], check=True)
 
 
 def test_site_v2_styles_support_kline_and_missing_panels():
@@ -586,17 +625,13 @@ def test_publish_script_includes_original_root_and_v2_subdirectory():
         '".nojekyll"',
         '"index.html"',
         '"data/app-data.json"',
-        '"v2/index.html"',
-        '"v2/app.js"',
-        '"v2/styles.css"',
-        '"v2/data/app-data.json"',
         '"site-v2"',
+        '"app-data.json"',
+        'sync_roots=["v2"]',
     ]:
         assert expected in source
 
-    assert '"base_tree"' in source
-    assert '"parents": [parent_sha]' in source
-    assert '"force": False' in source
+    assert 'source != SITE_V2 / "data" / "app-data.json"' in source
 
 
 def test_v2_requirements_document_records_confirmed_scope():

@@ -1,13 +1,13 @@
 # 全球资产判断系统跟踪总结
 
-本项目用于归档知识星球数据总表，解析每日 PDF/XLSX，写入 SQLite，生成观察日报，并用 Streamlit 仪表盘查看资产指标曲线。
+本项目用于归档知识星球数据总表，解析每日 PDF/XLSX，写入 SQLite，生成观察日报，并通过本地仪表盘和 GitHub Pages 公网版查看资产指标曲线。
 
 ## 当前状态
 
 - 已归档说明书和补充 PDF：`data/raw/source_docs`
-- 已导入 2026-06-09 样本：
-  - 核心数据集：235 行
-  - 押注工具：959 行
+- 最新核心数据集：2026-08-27，235 行
+- 最新内地主连：2026-08-27，28 行
+- 最新押注工具（ETF 独立板块）：2026-08-19，1037 行
 - 数据库：`data/processed/signals.sqlite`
 - 日报：`data/reports/2026-06-09_core.md`、`data/reports/2026-06-09_betting.md`
 
@@ -30,6 +30,14 @@ data/inbox/2026-06-22/
 ```powershell
 .\scripts\import_daily.ps1 -Path "D:\Workspace\project-027-全球资产判断系统跟踪总结\工程内容\data\inbox\2026-06-22\*.xlsx"
 ```
+
+归档、导入、行情更新、静态数据导出和公网发布也可以一次完成：
+
+```powershell
+.\scripts\update_daily_site.ps1 -Path <当天文件列表> -Publish
+```
+
+文件名包含“押注工具”时会自动识别为 ETF 数据集并更新“ETF 押注工具”分页；核心数据和内地主连仍只进入原商品板块。
 
 3. 同步能自动匹配的免费行情：
 
@@ -76,10 +84,10 @@ ASSET_TRACKER_PASSWORD=你的密码
 
 如果要像“国内商品期货波动率网页”一样通过 GitHub Pages 发公网链接，使用静态版：
 
-公网地址：
+公网 v2 地址：
 
 ```text
-https://123xiaode456-boop.github.io/global-asset-tracker-dashboard/
+https://123xiaode456-boop.github.io/global-asset-tracker-dashboard/v2/
 ```
 
 ```powershell
@@ -94,7 +102,7 @@ $env:PYTHONPATH="D:\Workspace\project-027-全球资产判断系统跟踪总结\�
 site/
 ```
 
-静态版包含总览、机会排名、资产表、期货品种四象限分图。每日导入新 Excel 后，需要重新运行导出脚本并发布 `site/`。
+静态版包含商品总览、机会排名、早期转折、期货品种四象限分图、三级别趋势、动量状态和独立 ETF 押注工具分页。数据按日期和页面拆分，首屏只加载清单、当前快照和当前期货数据；趋势、动量、ETF 与价格历史在进入对应页面时按需加载。全部历史数据仍保留，公网不再下载旧的 82MB 单体文件。发布脚本会同步完整分片目录并清理过期分片，公网网址保持不变。
 
 ## 手动命令
 

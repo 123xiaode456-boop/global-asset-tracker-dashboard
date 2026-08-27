@@ -15,3 +15,12 @@ def test_update_daily_site_fetches_futures_prices_before_static_export():
     assert "--dataset-type\", \"domestic_main\"" in script
     assert "--asset-kind\", \"domestic-futures\"" in script
     assert "--missing-only" in script
+
+
+def test_update_daily_site_publishes_shards_and_excludes_monolith_from_pages():
+    script = (PROJECT_ROOT / "scripts" / "update_daily_site.ps1").read_text(encoding="utf-8")
+
+    assert '--directory "site-v2=site-v2"' in script
+    assert '--directory "site-v2=v2"' in script
+    assert '--exclude "site-v2/data/app-data.json"' in script
+    assert 'manifest.json' in script

@@ -129,23 +129,37 @@ try {
   @"
 import json
 from pathlib import Path
-p = Path("site-v2/data/app-data.json")
-data = json.loads(p.read_text(encoding="utf-8"))
-date = data["datesByType"]["core"][-1]
-rows = len(data["snapshots"][f"core|{date}"]["latestRows"])
-print(f"verified: latest_date={date} latest_rows={rows} bytes={p.stat().st_size}")
+data_dir = Path("site-v2/data")
+manifest_path = data_dir / "manifest.json"
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+date = manifest["datesByType"]["core"][-1]
+snapshot_path = data_dir / manifest["files"]["snapshots"][f"core|{date}"]
+snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+rows = len(snapshot["latestRows"])
+betting_dates = manifest["datesByType"].get("betting", [])
+betting_date = betting_dates[-1] if betting_dates else None
+betting_path = data_dir / manifest["files"]["snapshots"][f"betting|{betting_date}"] if betting_date else None
+betting_rows = len(json.loads(betting_path.read_text(encoding="utf-8"))["latestRows"]) if betting_path else 0
+initial_bytes = manifest_path.stat().st_size + snapshot_path.stat().st_size
+futures_path = data_dir / manifest["files"]["futuresByDate"].get(date, "")
+if futures_path.is_file():
+    initial_bytes += futures_path.stat().st_size
+print(
+    f"verified: core_date={date} core_rows={rows} "
+    f"betting_date={betting_date or '-'} betting_rows={betting_rows} initial_bytes={initial_bytes}"
+)
 "@ | & $py -
   if ($LASTEXITCODE -ne 0) {
     throw "Static data verification failed with exit code $LASTEXITCODE"
   }
 
   if ($Publish) {
-    & $py (Join-Path $ProjectRoot "scripts\publish_site_data_main.py") --branch main --message "Update v2 data"
+    & $py (Join-Path $ProjectRoot "scripts\publish_site_data_main.py") --branch main --message "Update v2 lazy-loaded site" --directory "site-v2=site-v2"
     if ($LASTEXITCODE -ne 0) {
       throw "Main data publish failed with exit code $LASTEXITCODE"
     }
 
-    & $py (Join-Path $ProjectRoot "scripts\publish_site_data_main.py") --branch gh-pages --message "Deploy v2 data" --file "site-v2/data/app-data.json=v2/data/app-data.json"
+    & $py (Join-Path $ProjectRoot "scripts\publish_site_data_main.py") --branch gh-pages --message "Deploy v2 lazy-loaded site" --directory "site-v2=v2" --exclude "site-v2/data/app-data.json"
     if ($LASTEXITCODE -ne 0) {
       throw "GitHub Pages data publish failed with exit code $LASTEXITCODE"
     }

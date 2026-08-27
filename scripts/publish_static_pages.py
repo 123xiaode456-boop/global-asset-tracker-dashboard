@@ -6,26 +6,42 @@ from pathlib import Path
 
 import requests
 
+from publish_site_data_main import publish_files_with_git
+
 
 OWNER = "123xiaode456-boop"
 REPO = "global-asset-tracker-dashboard"
 ROOT = Path(__file__).resolve().parents[1]
 SITE = ROOT / "site"
 SITE_V2 = ROOT / "site-v2"
-FILES = [
+ROOT_FILES = [
     (".nojekyll", SITE / ".nojekyll"),
     ("index.html", SITE / "index.html"),
     ("app.js", SITE / "app.js"),
     ("styles.css", SITE / "styles.css"),
     ("data/app-data.json", SITE / "data" / "app-data.json"),
-    ("v2/index.html", SITE_V2 / "index.html"),
-    ("v2/app.js", SITE_V2 / "app.js"),
-    ("v2/styles.css", SITE_V2 / "styles.css"),
-    ("v2/data/app-data.json", SITE_V2 / "data" / "app-data.json"),
 ]
 
 
+def _files() -> list[tuple[str, Path]]:
+    v2_files = [
+        ((Path("v2") / source.relative_to(SITE_V2)).as_posix(), source)
+        for source in sorted(path for path in SITE_V2.rglob("*") if path.is_file())
+        if source != SITE_V2 / "data" / "app-data.json"
+    ]
+    return [*ROOT_FILES, *v2_files]
+
+
 def main() -> int:
+    files_to_publish = _files()
+    files = [(source.relative_to(ROOT).as_posix(), remote_path) for remote_path, source in files_to_publish]
+    return publish_files_with_git(
+        "gh-pages",
+        files,
+        "Deploy static global asset dashboard",
+        sync_roots=["v2"],
+    )
+
     token = subprocess.check_output(["gh", "auth", "token"], text=True).strip()
     session = requests.Session()
     session.headers.update(
@@ -47,7 +63,7 @@ def main() -> int:
         base_tree = parent["tree"]["sha"]
 
     items = []
-    for path, source in FILES:
+    for path, source in files_to_publish:
         raw = source.read_bytes()
         blob = _check(
             session.post(

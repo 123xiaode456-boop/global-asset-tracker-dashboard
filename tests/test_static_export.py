@@ -1,9 +1,10 @@
+import json
 from datetime import date
 from pathlib import Path
 
 from asset_tracker.database import AssetDatabase
 from asset_tracker.parsers import DatasetMetadata, ParsedDataset
-from export_static_site import build_static_payload
+from export_static_site import build_static_payload, export_static_shards
 
 
 def test_static_export_includes_price_history_by_asset_key(tmp_path):
@@ -107,6 +108,46 @@ def test_static_export_marks_domestic_futures_in_futures_by_date(tmp_path):
     }
 
 
+def test_commodity_site_export_includes_betting_dates_rows_and_inline_momentum(tmp_path):
+    db = AssetDatabase(tmp_path / "signals.sqlite")
+    db.initialize()
+    core = ParsedDataset(
+        metadata=DatasetMetadata(date(2026, 8, 3), "core"),
+        source_path=Path("core.xlsx"),
+        source_hash="core-etf-site-export",
+        rows=[_sample_row("GC1!", "Gold Futures")],
+    )
+    betting_row = {
+        **_sample_row("159611", "电力ETF"),
+        "current_momentum_state_duration": 1,
+        "current_momentum_state": "正",
+        "current_momentum_state_return": 2.5,
+        "previous_momentum_state": "打点",
+        "previous_momentum_state_return": 0.2,
+        "momentum_value": 1.25,
+        "momentum_daily_change": 0.35,
+    }
+    betting = ParsedDataset(
+        metadata=DatasetMetadata(date(2026, 8, 3), "betting"),
+        source_path=Path("betting.xlsx"),
+        source_hash="betting-etf-site-export",
+        rows=[betting_row],
+    )
+    db.import_parsed_dataset(core, core.source_path)
+    db.import_parsed_dataset(betting, betting.source_path)
+
+    payload = build_static_payload(db.path, commodity_only=True)
+    snapshot = payload["snapshots"]["betting|2026-08-03"]
+
+    assert payload["datasetTypes"] == ["core", "betting"]
+    assert payload["datesByType"]["betting"] == ["2026-08-03"]
+    assert len(snapshot["latestRows"]) == 1
+    assert snapshot["latestRows"][0]["asset_code"] == "159611"
+    assert snapshot["latestRows"][0]["current_momentum_state"] == "正"
+    assert snapshot["latestRows"][0]["momentum_value"] == 1.25
+    assert "159611|电力ETF" in payload["priceCoverage"]
+
+
 def test_static_export_merges_domestic_main_and_exports_momentum(tmp_path):
     db = AssetDatabase(tmp_path / "signals.sqlite")
     db.initialize()
@@ -155,6 +196,46 @@ def test_static_export_merges_domestic_main_and_exports_momentum(tmp_path):
     domestic_item = next(item for item in payload["futuresByDate"]["2026-07-17"] if item["assetCode"] == "AL8")
     assert domestic_item["group"] == "农产品"
     assert domestic_item["isDomestic"] is True
+
+
+def test_static_export_writes_lazy_shards_without_losing_source_rows(tmp_path):
+    payload = {
+        "generatedAt": "2026-08-27T21:15:47",
+        "datasetTypes": ["core", "betting"],
+        "datesByType": {"core": ["2026-08-27"], "betting": ["2026-08-19"]},
+        "snapshots": {
+            "core|2026-08-27": {
+                "latestDate": "2026-08-27",
+                "availableDates": ["2026-08-27"],
+                "datasetTypes": ["core"],
+                "assetCount": 1,
+                "latestCounts": {"total": 1},
+                "latestRows": [{"asset_key": "GC1!|Gold Futures", "asset_code": "GC1!"}],
+                "focusWatch": [{"asset_code": "GC1!"}],
+                "riskWatch": [],
+                "longOpportunities": [{"asset_code": "GC1!"}],
+                "shortOpportunities": [],
+            }
+        },
+        "futuresByDate": {"2026-08-27": [{"assetKey": "GC1!|Gold Futures", "points": []}]},
+        "momentumDates": ["2026-08-27"],
+        "momentumByDate": {"2026-08-27": [{"asset_key": "GC1!|Gold Futures", "momentum_value": 1.25}]},
+        "momentumHistoryByAsset": {"GC1!|Gold Futures": [{"asset_key": "GC1!|Gold Futures", "momentum_value": 1.25}]},
+        "priceHistories": {"GC1!|Gold Futures": [{"bar_date": "2026-08-27", "close": 100.0}]},
+        "priceCoverage": {"GC1!|Gold Futures": {"hasPrice": True, "priceRows": 1}},
+    }
+
+    manifest_path = export_static_shards(payload, tmp_path / "data")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    snapshot_path = manifest_path.parent / manifest["files"]["snapshots"]["core|2026-08-27"]
+    momentum_path = manifest_path.parent / manifest["files"]["momentumByDate"]["2026-08-27"]
+
+    snapshot = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    momentum = json.loads(momentum_path.read_text(encoding="utf-8"))
+    assert snapshot["latestRows"] == payload["snapshots"]["core|2026-08-27"]["latestRows"]
+    assert momentum == payload["momentumByDate"]["2026-08-27"]
+    assert manifest["retainedData"]["momentumRowCount"] == 1
+    assert not (manifest_path.parent / "momentum-history-by-asset.json").exists()
 
 
 def _sample_row(asset_code: str, asset_name: str, asset_name_cn: str = "") -> dict:
