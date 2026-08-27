@@ -1,4 +1,4 @@
-const DATA_URL = "./data/app-data.json";
+const DATA_URL = "./data/manifest.json";
 
 const state = {
   data: null,
@@ -20,6 +20,8 @@ const state = {
     barOne: false,
   },
 };
+
+const pendingLoads = new Map();
 
 const GROUP_COLORS = {
   "化工品": "#0969da",
@@ -142,14 +144,23 @@ const ETF_DETAIL_COLUMNS = [
 
 async function main() {
   const response = await fetch(currentDataUrl(), { cache: "no-store" });
-  state.data = await response.json();
+  if (!response.ok) throw new Error(`数据清单加载失败：HTTP ${response.status}`);
+  const manifest = await response.json();
+  state.data = {
+    ...manifest,
+    snapshots: {},
+    futuresByDate: {},
+    momentumByDate: {},
+    priceHistories: null,
+    priceCoverage: null,
+  };
   initControls();
-  render();
-  selectView(state.activeView);
+  await selectView(state.activeView);
 }
 
-function currentDataUrl() {
-  return `${DATA_URL}?v=${Date.now()}`;
+function currentDataUrl(path = DATA_URL) {
+  const version = state.data?.generatedAt || Date.now();
+  return `${path}?v=${encodeURIComponent(version)}`;
 }
 
 function initControls() {
@@ -161,7 +172,7 @@ function initControls() {
     .join("");
   datasetSelect.value = "core";
   datasetSelect.addEventListener("change", () => {
-    selectView(datasetSelect.value === "betting" ? "etf" : "overview");
+    void selectView(datasetSelect.value === "betting" ? "etf" : "overview");
   });
 
   const dates = datesForCurrentDataset();
@@ -181,8 +192,7 @@ function syncDateSelect() {
   dateSelect.value = state.date;
   dateSelect.onchange = () => {
     state.date = dateSelect.value;
-    render();
-    selectView(state.activeView);
+    void refreshCurrentView();
   };
 }
 
@@ -191,7 +201,125 @@ function datesForCurrentDataset() {
 }
 
 function currentSnapshot() {
-  return state.data.snapshots[`${state.datasetKey}|${state.date}`];
+  return state.data?.snapshots?.[`${state.datasetKey}|${state.date}`];
+}
+
+async function fetchDataFile(relativePath) {
+  const normalized = String(relativePath || "").replace(/^\.\//, "");
+  const response = await fetch(currentDataUrl(`./data/${normalized}`), { cache: "no-store" });
+  if (!response.ok) throw new Error(`数据分片加载失败：${normalized}（HTTP ${response.status}）`);
+  return response.json();
+}
+
+async function loadOnce(cacheKey, relativePath, assign) {
+  if (!relativePath) return;
+  if (!pendingLoads.has(cacheKey)) {
+    pendingLoads.set(
+      cacheKey,
+      fetchDataFile(relativePath)
+        .then((value) => {
+          assign(value);
+          return value;
+        })
+        .finally(() => pendingLoads.delete(cacheKey))
+    );
+  }
+  await pendingLoads.get(cacheKey);
+}
+
+async function ensureSnapshot(datasetKey = state.datasetKey, date = state.date) {
+  const key = `${datasetKey}|${date}`;
+  if (!date || state.data?.snapshots?.[key]) return;
+  const relativePath = state.data?.files?.snapshots?.[key];
+  await loadOnce(`snapshot:${key}`, relativePath, (value) => {
+    state.data.snapshots[key] = value;
+  });
+}
+
+async function ensureFutures(date = state.date) {
+  if (!date || Object.prototype.hasOwnProperty.call(state.data?.futuresByDate || {}, date)) return;
+  const relativePath = state.data?.files?.futuresByDate?.[date];
+  await loadOnce(`futures:${date}`, relativePath, (value) => {
+    state.data.futuresByDate[date] = value;
+  });
+}
+
+async function ensureMomentum(date = state.date) {
+  if (!date || Object.prototype.hasOwnProperty.call(state.data?.momentumByDate || {}, date)) return;
+  const relativePath = state.data?.files?.momentumByDate?.[date];
+  await loadOnce(`momentum:${date}`, relativePath, (value) => {
+    state.data.momentumByDate[date] = value;
+  });
+}
+
+async function ensurePriceHistories() {
+  if (state.data?.priceHistories !== null && state.data?.priceHistories !== undefined) return;
+  const relativePath = state.data?.files?.priceHistories;
+  if (!relativePath) {
+    state.data.priceHistories = {};
+    return;
+  }
+  await loadOnce("priceHistories", relativePath, (value) => {
+    state.data.priceHistories = value;
+  });
+}
+
+async function ensureTrendSnapshots(date = state.date) {
+  const dates = coreDatesInLast30Days(date);
+  await Promise.all(dates.map((item) => ensureSnapshot("core", item)));
+}
+
+async function ensureViewData(view = selectedView()) {
+  await ensureSnapshot(state.datasetKey, state.date);
+  if (state.datasetKey === "betting") return;
+  await ensureFutures(state.date);
+  if (view === "momentum") await ensureMomentum(state.date);
+  if (view === "trend") await ensureTrendSnapshots(state.date);
+  if (["long", "short"].includes(view)) await ensurePriceHistories();
+}
+
+async function refreshCurrentView() {
+  if (!state.data) return;
+  const generated = document.querySelector("#generatedAt");
+  if (generated) generated.textContent = `数据加载中；当前日期：${state.date || "-"}`;
+  await ensureViewData(selectedView());
+  renderCurrentView();
+}
+
+function renderCurrentView() {
+  const snapshot = currentSnapshot();
+  document.querySelector("#generatedAt").textContent = `数据生成：${state.data.generatedAt}；当前日期：${state.date || "-"}`;
+  if (!snapshot) return;
+  if (state.datasetKey === "betting") {
+    renderEtf();
+    return;
+  }
+
+  const allRows = snapshot.latestRows || [];
+  const rows = currentCommodityRows(allRows);
+  const longRows = filterLong(allRows);
+  const shortRows = filterShort(allRows);
+  const view = selectedView();
+  if (view === "overview") {
+    renderMetrics(snapshot, longRows, shortRows);
+    renderBarAlerts(rows);
+  } else if (view === "long") {
+    document.querySelector("#longMatrix").innerHTML = tableHtml(sortPreview(longRows), MATRIX_COLUMNS);
+    renderKlinePanel("#longKlinePanel", sortPreview(longRows));
+  } else if (view === "short") {
+    document.querySelector("#shortMatrix").innerHTML = tableHtml(sortPreview(shortRows), MATRIX_COLUMNS);
+    renderKlinePanel("#shortKlinePanel", sortPreview(shortRows));
+  } else if (view === "early") {
+    renderEarlyView(rows);
+  } else if (view === "trajectory") {
+    renderMonthlyTrajectories();
+  } else if (view === "trend") {
+    renderTrendBars();
+  } else if (view === "momentum") {
+    renderMomentum();
+  } else if (view === "search") {
+    renderSearch();
+  }
 }
 
 function render() {
@@ -1265,13 +1393,13 @@ function selectView(view) {
     const datasetSelect = document.querySelector("#datasetSelect");
     if (datasetSelect) datasetSelect.value = targetDataset;
     syncDateSelect();
-    render();
   }
   state.activeView = view;
   if (document.body) document.body.dataset.activeView = view;
   document.querySelectorAll("[data-view-target]").forEach((button) => {
     button.classList.toggle("active", button.dataset.viewTarget === view);
   });
+  const refreshPromise = refreshCurrentView();
   if (view === "early") {
     requestAnimationFrame(() => {
       const chart = document.querySelector("#relativeCrossSection");
@@ -1284,6 +1412,7 @@ function selectView(view) {
       if (chart && globalThis.Plotly?.Plots?.resize) Plotly.Plots.resize(chart);
     });
   }
+  return refreshPromise;
 }
 
 function selectedQuadrantGroup() {
