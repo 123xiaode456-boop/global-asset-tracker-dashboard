@@ -172,7 +172,8 @@ body[data-active-view="early"] [data-view]:not([data-view="early"]),
 body[data-active-view="trajectory"] [data-view]:not([data-view="trajectory"]),
 body[data-active-view="trend"] [data-view]:not([data-view="trend"]),
 body[data-active-view="momentum"] [data-view]:not([data-view="momentum"]),
-body[data-active-view="search"] [data-view]:not([data-view="search"]) {
+body[data-active-view="search"] [data-view]:not([data-view="search"]),
+body[data-active-view="etf"] [data-view]:not([data-view="etf"]) {
   display: none;
 }
 
@@ -511,6 +512,47 @@ body[data-active-view="early"] section[data-view="early"] {
   min-width: 320px;
 }
 
+.etf-controls {
+  display: grid;
+  grid-template-columns: minmax(230px, 1.8fr) repeat(4, minmax(132px, 1fr)) auto auto auto;
+  gap: 10px;
+  align-items: end;
+  margin: 14px 0 18px;
+}
+
+.etf-controls label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.etf-controls .checkbox-control {
+  display: flex;
+  align-items: center;
+  min-height: 40px;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.etf-controls .checkbox-control input {
+  width: 16px;
+  height: 16px;
+}
+
+.etf-rank-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 14px 0 22px;
+}
+
+.etf-rank-panel {
+  min-width: 0;
+  border-top: 3px solid var(--line);
+  padding-top: 10px;
+}
+
 .momentum-state-tabs {
   display: flex;
   flex-wrap: wrap;
@@ -585,5 +627,10 @@ pre {
 
   .momentum-controls input {
     min-width: min(320px, 82vw);
+  }
+
+  .etf-controls,
+  .etf-rank-grid {
+    grid-template-columns: 1fr;
   }
 }

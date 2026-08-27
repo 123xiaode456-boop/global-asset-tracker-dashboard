@@ -1,4 +1,4 @@
-const DATA_URL = "./data/app-data.json";
+const DATA_URL = "./data/manifest.json";
 
 const state = {
   data: null,
@@ -11,7 +11,17 @@ const state = {
   earlySearch: "",
   momentumSearch: "",
   momentumState: "all",
+  etfFilters: {
+    search: "",
+    relativeState: "all",
+    capitalState: "all",
+    dayTrend: "all",
+    momentumState: "all",
+    barOne: false,
+  },
 };
+
+const pendingLoads = new Map();
 
 const GROUP_COLORS = {
   "化工品": "#0969da",
@@ -23,7 +33,7 @@ const GROUP_COLORS = {
 };
 
 const REQUIRED_FUTURES_GROUPS = ["化工品", "农产品", "有色", "贵金属", "黑色建材", "能源运输"];
-const VIEW_KEYS = ["overview", "long", "short", "early", "trajectory", "trend", "momentum", "search"];
+const VIEW_KEYS = ["overview", "long", "short", "early", "trajectory", "trend", "momentum", "search", "etf"];
 const MA_WINDOWS = [5, 10, 20, 60, 250];
 const RELATIVE_STATE_QUADRANTS = {
   improving: { label: "Improving", xSign: -1, ySign: 1 },
@@ -88,29 +98,81 @@ const MOMENTUM_COLUMNS = [
   ["momentum_change_label", "动能变化解读"],
 ];
 
+const ETF_RANK_COLUMNS = [
+  ["opportunity_rank", "排名"],
+  ["asset_code", "代码"],
+  ["asset_name_cn", "中文名"],
+  ["asset_name", "英文名"],
+  ["relative_state_duration", "比价bar"],
+  ["relative_state", "比价状态"],
+  ["capital_state_duration", "资金bar"],
+  ["capital_state", "资金状态"],
+  ["day_trend_duration", "日K bar"],
+  ["day_trend", "日K"],
+  ["week_trend_duration", "周K bar"],
+  ["week_trend", "周K"],
+  ["current_momentum_state", "动能"],
+  ["momentum_daily_change", "动能日变动"],
+];
+
+const ETF_DETAIL_COLUMNS = [
+  ["asset_code", "代码"],
+  ["asset_name_cn", "中文名"],
+  ["asset_name", "英文名"],
+  ["decision", "观察判断"],
+  ["relative_state_duration", "比价bar"],
+  ["relative_state", "比价状态"],
+  ["relative_state_return", "比价状态涨幅"],
+  ["relative_strength", "相对强度"],
+  ["strength_momentum", "强度动量"],
+  ["early_turn", "早期转折"],
+  ["day_trend", "日K"],
+  ["day_trend_duration", "日K bar"],
+  ["week_trend", "周K"],
+  ["week_trend_duration", "周K bar"],
+  ["month_trend", "月K"],
+  ["month_trend_duration", "月K bar"],
+  ["capital_state_duration", "资金bar"],
+  ["capital_state", "资金状态"],
+  ["capital_value", "资金数值"],
+  ["capital_daily_change", "资金日变动"],
+  ["current_momentum_state_duration", "动能bar"],
+  ["current_momentum_state", "动能状态"],
+  ["momentum_value", "动能数值"],
+  ["momentum_daily_change", "动能日变动"],
+];
+
 async function main() {
   const response = await fetch(currentDataUrl(), { cache: "no-store" });
-  state.data = await response.json();
+  if (!response.ok) throw new Error(`数据清单加载失败：HTTP ${response.status}`);
+  const manifest = await response.json();
+  state.data = {
+    ...manifest,
+    snapshots: {},
+    futuresByDate: {},
+    momentumByDate: {},
+    priceHistories: null,
+    priceCoverage: null,
+  };
   initControls();
-  render();
-  selectView(state.activeView);
+  await selectView(state.activeView);
 }
 
-function currentDataUrl() {
-  return `${DATA_URL}?v=${Date.now()}`;
+function currentDataUrl(path = DATA_URL) {
+  const version = state.data?.generatedAt || Date.now();
+  return `${path}?v=${encodeURIComponent(version)}`;
 }
 
 function initControls() {
   const datasetSelect = document.querySelector("#datasetSelect");
-  datasetSelect.innerHTML = `<option value="core">核心数据集</option>`;
+  const datasetLabels = { core: "商品核心数据", betting: "ETF 押注工具" };
+  datasetSelect.innerHTML = (state.data.datasetTypes || ["core"])
+    .filter((key) => ["core", "betting"].includes(key))
+    .map((key) => `<option value="${key}">${datasetLabels[key]}</option>`)
+    .join("");
   datasetSelect.value = "core";
   datasetSelect.addEventListener("change", () => {
-    state.datasetKey = "core";
-    const dates = datesForCurrentDataset();
-    state.date = dates.at(-1) || "";
-    syncDateSelect();
-    render();
-    selectView(state.activeView);
+    void selectView(datasetSelect.value === "betting" ? "etf" : "overview");
   });
 
   const dates = datesForCurrentDataset();
@@ -130,8 +192,7 @@ function syncDateSelect() {
   dateSelect.value = state.date;
   dateSelect.onchange = () => {
     state.date = dateSelect.value;
-    render();
-    selectView(state.activeView);
+    void refreshCurrentView();
   };
 }
 
@@ -140,13 +201,136 @@ function datesForCurrentDataset() {
 }
 
 function currentSnapshot() {
-  return state.data.snapshots[`${state.datasetKey}|${state.date}`];
+  return state.data?.snapshots?.[`${state.datasetKey}|${state.date}`];
+}
+
+async function fetchDataFile(relativePath) {
+  const normalized = String(relativePath || "").replace(/^\.\//, "");
+  const response = await fetch(currentDataUrl(`./data/${normalized}`), { cache: "no-store" });
+  if (!response.ok) throw new Error(`数据分片加载失败：${normalized}（HTTP ${response.status}）`);
+  return response.json();
+}
+
+async function loadOnce(cacheKey, relativePath, assign) {
+  if (!relativePath) return;
+  if (!pendingLoads.has(cacheKey)) {
+    pendingLoads.set(
+      cacheKey,
+      fetchDataFile(relativePath)
+        .then((value) => {
+          assign(value);
+          return value;
+        })
+        .finally(() => pendingLoads.delete(cacheKey))
+    );
+  }
+  await pendingLoads.get(cacheKey);
+}
+
+async function ensureSnapshot(datasetKey = state.datasetKey, date = state.date) {
+  const key = `${datasetKey}|${date}`;
+  if (!date || state.data?.snapshots?.[key]) return;
+  const relativePath = state.data?.files?.snapshots?.[key];
+  await loadOnce(`snapshot:${key}`, relativePath, (value) => {
+    state.data.snapshots[key] = value;
+  });
+}
+
+async function ensureFutures(date = state.date) {
+  if (!date || Object.prototype.hasOwnProperty.call(state.data?.futuresByDate || {}, date)) return;
+  const relativePath = state.data?.files?.futuresByDate?.[date];
+  await loadOnce(`futures:${date}`, relativePath, (value) => {
+    state.data.futuresByDate[date] = value;
+  });
+}
+
+async function ensureMomentum(date = state.date) {
+  if (!date || Object.prototype.hasOwnProperty.call(state.data?.momentumByDate || {}, date)) return;
+  const relativePath = state.data?.files?.momentumByDate?.[date];
+  await loadOnce(`momentum:${date}`, relativePath, (value) => {
+    state.data.momentumByDate[date] = value;
+  });
+}
+
+async function ensurePriceHistories() {
+  if (state.data?.priceHistories !== null && state.data?.priceHistories !== undefined) return;
+  const relativePath = state.data?.files?.priceHistories;
+  if (!relativePath) {
+    state.data.priceHistories = {};
+    return;
+  }
+  await loadOnce("priceHistories", relativePath, (value) => {
+    state.data.priceHistories = value;
+  });
+}
+
+async function ensureTrendSnapshots(date = state.date) {
+  const dates = coreDatesInLast30Days(date);
+  await Promise.all(dates.map((item) => ensureSnapshot("core", item)));
+}
+
+async function ensureViewData(view = selectedView()) {
+  await ensureSnapshot(state.datasetKey, state.date);
+  if (state.datasetKey === "betting") return;
+  await ensureFutures(state.date);
+  if (view === "momentum") await ensureMomentum(state.date);
+  if (view === "trend") await ensureTrendSnapshots(state.date);
+  if (["long", "short"].includes(view)) await ensurePriceHistories();
+}
+
+async function refreshCurrentView() {
+  if (!state.data) return;
+  const generated = document.querySelector("#generatedAt");
+  if (generated) generated.textContent = `数据加载中；当前日期：${state.date || "-"}`;
+  await ensureViewData(selectedView());
+  renderCurrentView();
+}
+
+function renderCurrentView() {
+  const snapshot = currentSnapshot();
+  document.querySelector("#generatedAt").textContent = `数据生成：${state.data.generatedAt}；当前日期：${state.date || "-"}`;
+  if (!snapshot) return;
+  if (state.datasetKey === "betting") {
+    renderEtf();
+    return;
+  }
+
+  const allRows = snapshot.latestRows || [];
+  const rows = currentCommodityRows(allRows);
+  const longRows = filterLong(allRows);
+  const shortRows = filterShort(allRows);
+  const view = selectedView();
+  if (view === "overview") {
+    renderMetrics(snapshot, longRows, shortRows);
+    renderBarAlerts(rows);
+  } else if (view === "long") {
+    document.querySelector("#longMatrix").innerHTML = tableHtml(sortPreview(longRows), MATRIX_COLUMNS);
+    renderKlinePanel("#longKlinePanel", sortPreview(longRows));
+  } else if (view === "short") {
+    document.querySelector("#shortMatrix").innerHTML = tableHtml(sortPreview(shortRows), MATRIX_COLUMNS);
+    renderKlinePanel("#shortKlinePanel", sortPreview(shortRows));
+  } else if (view === "early") {
+    renderEarlyView(rows);
+  } else if (view === "trajectory") {
+    renderMonthlyTrajectories();
+  } else if (view === "trend") {
+    renderTrendBars();
+  } else if (view === "momentum") {
+    renderMomentum();
+  } else if (view === "search") {
+    renderSearch();
+  }
 }
 
 function render() {
   const snapshot = currentSnapshot();
   document.querySelector("#generatedAt").textContent = `数据生成：${state.data.generatedAt}；当前日期：${state.date || "-"}`;
   if (!snapshot) return;
+
+  if (state.datasetKey === "betting") {
+    renderEtf();
+    return;
+  }
 
   const allRows = snapshot.latestRows || [];
   const rows = currentCommodityRows(allRows);
@@ -164,6 +348,135 @@ function render() {
   renderTrendBars();
   renderMomentum();
   renderSearch();
+}
+
+function etfRowsForCurrentDate() {
+  const snapshot = currentSnapshot();
+  return snapshot?.latestRows || [];
+}
+
+function filterEtfRows(rows = etfRowsForCurrentDate()) {
+  const filters = state.etfFilters;
+  const query = text(filters.search).toLowerCase();
+  return rows.filter((row) => {
+    const searchMatches =
+      !query ||
+      [row.asset_code, row.asset_name_cn, row.asset_name, row.asset_key]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(query);
+    const relativeMatches =
+      filters.relativeState === "all" ||
+      text(row.relative_state).toLowerCase() === text(filters.relativeState).toLowerCase();
+    const capitalMatches = filters.capitalState === "all" || text(row.capital_state) === filters.capitalState;
+    const dayMatches =
+      filters.dayTrend === "all" ||
+      (filters.dayTrend === "up" && isUp(row.day_trend)) ||
+      (filters.dayTrend === "down" && isDown(row.day_trend)) ||
+      (filters.dayTrend === "flat" && isFlat(row.day_trend));
+    const momentumMatches = filters.momentumState === "all" || momentumStateKind(row) === filters.momentumState;
+    const barMatches = !filters.barOne || hasAnySignalBarOne(row);
+    return searchMatches && relativeMatches && capitalMatches && dayMatches && momentumMatches && barMatches;
+  });
+}
+
+function hasAnySignalBarOne(row) {
+  return [
+    "day_trend_duration",
+    "week_trend_duration",
+    "month_trend_duration",
+    "relative_state_duration",
+    "capital_state_duration",
+    "current_momentum_state_duration",
+  ].some((key) => optionalNumber(row[key]) === 1);
+}
+
+function rankEtfOpportunities(rows, direction) {
+  const filtered = direction === "long" ? filterLong(rows) : filterShort(rows);
+  const stateOrder = direction === "long" ? { improving: 0, lead: 1 } : { lag: 0, weakening: 1 };
+  return [...filtered]
+    .sort(
+      (a, b) =>
+        (stateOrder[text(a.relative_state).toLowerCase()] ?? 9) -
+          (stateOrder[text(b.relative_state).toLowerCase()] ?? 9) ||
+        number(a.relative_state_duration) - number(b.relative_state_duration) ||
+        number(a.capital_state_duration) - number(b.capital_state_duration) ||
+        number(a.day_trend_duration) - number(b.day_trend_duration) ||
+        text(a.asset_code).localeCompare(text(b.asset_code))
+    )
+    .map((row, index) => ({ ...row, opportunity_rank: index + 1 }));
+}
+
+function setEtfFilter(key, value) {
+  if (!(key in state.etfFilters)) return;
+  state.etfFilters[key] = key === "barOne" ? Boolean(value) : text(value);
+  renderEtf();
+}
+
+function resetEtfFilters() {
+  state.etfFilters = {
+    search: "",
+    relativeState: "all",
+    capitalState: "all",
+    dayTrend: "all",
+    momentumState: "all",
+    barOne: false,
+  };
+  renderEtf();
+}
+
+function syncEtfControls() {
+  const mapping = {
+    "#etfSearch": state.etfFilters.search,
+    "#etfRelativeState": state.etfFilters.relativeState,
+    "#etfCapitalState": state.etfFilters.capitalState,
+    "#etfDayTrend": state.etfFilters.dayTrend,
+    "#etfMomentumState": state.etfFilters.momentumState,
+  };
+  Object.entries(mapping).forEach(([selector, value]) => {
+    const control = document.querySelector(selector);
+    if (control && control.value !== value) control.value = value;
+  });
+  const checkbox = document.querySelector("#etfBarOne");
+  if (checkbox) checkbox.checked = state.etfFilters.barOne;
+}
+
+function renderEtf() {
+  const allRows = etfRowsForCurrentDate();
+  const rows = filterEtfRows(allRows);
+  const longRows = rankEtfOpportunities(rows, "long");
+  const shortRows = rankEtfOpportunities(rows, "short");
+  const barRows = rows
+    .filter(hasAnySignalBarOne)
+    .map((row) => ({ ...row, decision: decisionLabel(row) }))
+    .sort((a, b) => text(a.asset_code).localeCompare(text(b.asset_code)));
+  const detailRows = rows.map((row) => ({ ...row, decision: decisionLabel(row) }));
+  syncEtfControls();
+
+  const stateCounts = Object.fromEntries(
+    ["improving", "lead", "lag", "weakening"].map((key) => [
+      key,
+      allRows.filter((row) => text(row.relative_state).toLowerCase() === key).length,
+    ])
+  );
+  document.querySelector("#etfMetrics").innerHTML = [
+    ["日期", state.date || "-"],
+    ["ETF候选池", allRows.length],
+    ["Improving", stateCounts.improving],
+    ["Lead", stateCounts.lead],
+    ["Lag", stateCounts.lag],
+    ["Weakening", stateCounts.weakening],
+    ["做多候选", rankEtfOpportunities(allRows, "long").length],
+    ["做空候选", rankEtfOpportunities(allRows, "short").length],
+  ]
+    .map(([label, value]) => `<div class="metric"><span>${label}</span><strong>${value}</strong></div>`)
+    .join("");
+  document.querySelector("#etfFilterStatus").textContent = `${rows.length} / ${allRows.length}`;
+  document.querySelector("#etfLongRank").innerHTML = tableHtml(longRows, ETF_RANK_COLUMNS);
+  document.querySelector("#etfShortRank").innerHTML = tableHtml(shortRows, ETF_RANK_COLUMNS);
+  document.querySelector("#etfBarAlerts").innerHTML = tableHtml(barRows, ETF_DETAIL_COLUMNS);
+  document.querySelector("#etfTable").innerHTML = tableHtml(detailRows, ETF_DETAIL_COLUMNS);
 }
 
 function renderMetrics(snapshot, longRows, shortRows) {
@@ -965,6 +1278,7 @@ function mirroredAxis(values, minOuter) {
   const outer = niceAxisOuter(Math.max(...values, minOuter));
   const middle = niceAxisTick(outer / 2);
   return {
+    outer,
     range: [-outer, outer],
     tickvals: [-outer, -middle, 0, middle, outer],
     ticktext: [formatTick(outer), formatTick(middle), "0", formatTick(middle), formatTick(outer)],
@@ -1071,11 +1385,21 @@ function selectedView() {
 
 function selectView(view) {
   if (!VIEW_KEYS.includes(view)) return;
+  const targetDataset = view === "etf" ? "betting" : "core";
+  const datasetChanged = state.datasetKey !== targetDataset;
+  if (datasetChanged) {
+    state.datasetKey = targetDataset;
+    state.date = datesForCurrentDataset().at(-1) || "";
+    const datasetSelect = document.querySelector("#datasetSelect");
+    if (datasetSelect) datasetSelect.value = targetDataset;
+    syncDateSelect();
+  }
   state.activeView = view;
   if (document.body) document.body.dataset.activeView = view;
   document.querySelectorAll("[data-view-target]").forEach((button) => {
     button.classList.toggle("active", button.dataset.viewTarget === view);
   });
+  const refreshPromise = refreshCurrentView();
   if (view === "early") {
     requestAnimationFrame(() => {
       const chart = document.querySelector("#relativeCrossSection");
@@ -1088,6 +1412,7 @@ function selectView(view) {
       if (chart && globalThis.Plotly?.Plots?.resize) Plotly.Plots.resize(chart);
     });
   }
+  return refreshPromise;
 }
 
 function selectedQuadrantGroup() {
