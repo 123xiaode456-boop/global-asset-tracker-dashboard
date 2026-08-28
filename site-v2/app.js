@@ -196,8 +196,10 @@ function syncDateSelect() {
   };
 }
 
-function datesForCurrentDataset() {
-  return state.data.datesByType[state.datasetKey] || [];
+function datesForCurrentDataset(view = selectedView()) {
+  if (state.datasetKey === "betting") return state.data?.datesByType?.betting || [];
+  if (view === "momentum") return state.data?.momentumDates || state.data?.datesByType?.core || [];
+  return state.data?.datesByType?.core || [];
 }
 
 function currentSnapshot() {
@@ -1387,14 +1389,15 @@ function selectView(view) {
   if (!VIEW_KEYS.includes(view)) return;
   const targetDataset = view === "etf" ? "betting" : "core";
   const datasetChanged = state.datasetKey !== targetDataset;
+  state.activeView = view;
   if (datasetChanged) {
     state.datasetKey = targetDataset;
-    state.date = datesForCurrentDataset().at(-1) || "";
     const datasetSelect = document.querySelector("#datasetSelect");
     if (datasetSelect) datasetSelect.value = targetDataset;
-    syncDateSelect();
   }
-  state.activeView = view;
+  const dates = datesForCurrentDataset(view);
+  if (datasetChanged || !dates.includes(state.date)) state.date = dates.at(-1) || "";
+  if (state.data) syncDateSelect();
   if (document.body) document.body.dataset.activeView = view;
   document.querySelectorAll("[data-view-target]").forEach((button) => {
     button.classList.toggle("active", button.dataset.viewTarget === view);
@@ -1445,7 +1448,8 @@ function futuresDisplayName(item) {
 
 function coreDatesInLast30Days(dateText) {
   const cutoff = monthCutoff(dateText);
-  return (state.data?.datesByType?.core || []).filter((date) => date >= cutoff && date <= dateText);
+  const dates = state.data?.commodityDates || state.data?.datesByType?.core || [];
+  return dates.filter((date) => date >= cutoff && date <= dateText);
 }
 
 function monthCutoff(dateText) {

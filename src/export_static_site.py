@@ -81,6 +81,7 @@ def export_static_shards(payload: dict[str, Any], data_dir: str | Path) -> Path:
         "generatedAt": payload.get("generatedAt"),
         "datasetTypes": payload.get("datasetTypes", []),
         "datesByType": payload.get("datesByType", {}),
+        "commodityDates": payload.get("commodityDates", payload.get("datesByType", {}).get("core", [])),
         "momentumDates": payload.get("momentumDates", []),
         "files": {
             "snapshots": snapshot_files,
@@ -135,11 +136,15 @@ def build_static_payload(db_path: str | Path, commodity_only: bool = False) -> d
     snapshots: dict[str, Any] = {}
     dates_by_type: dict[str, list[str]] = {}
     rows_for_prices: dict[str, dict[str, Any]] = {}
+    core_dates = load_dashboard_snapshot(db_path, "core").available_dates
+    domestic_main_dates = load_dashboard_snapshot(db_path, "domestic_main").available_dates
+    commodity_dates = sorted(set(core_dates) | set(domestic_main_dates))
     for dataset_type in dataset_options:
         key_type = dataset_type or "all"
         base_snapshot = load_dashboard_snapshot(db_path, dataset_type)
         dates_by_type[key_type] = base_snapshot.available_dates
-        for dataset_date in base_snapshot.available_dates:
+        snapshot_dates = commodity_dates if dataset_type == "core" else base_snapshot.available_dates
+        for dataset_date in snapshot_dates:
             snapshot = load_dashboard_snapshot(db_path, dataset_type, dataset_date)
             snapshot_payload = _snapshot_payload(snapshot)
             if dataset_type:
@@ -162,7 +167,7 @@ def build_static_payload(db_path: str | Path, commodity_only: bool = False) -> d
                 rows_for_prices[asset_key] = row
 
     futures_by_date: dict[str, list[dict[str, Any]]] = {}
-    for dataset_date in dates_by_type.get("core", []):
+    for dataset_date in commodity_dates:
         trajectories = [
             *load_futures_commodity_trajectories(db_path, dataset_date=dataset_date, dataset_type="core"),
             *load_futures_commodity_trajectories(
@@ -189,6 +194,7 @@ def build_static_payload(db_path: str | Path, commodity_only: bool = False) -> d
         "generatedAt": datetime.now().isoformat(timespec="seconds"),
         "datasetTypes": dataset_types,
         "datesByType": dates_by_type,
+        "commodityDates": commodity_dates,
         "snapshots": snapshots,
         "futuresByDate": futures_by_date,
         "momentumDates": momentum_dates,

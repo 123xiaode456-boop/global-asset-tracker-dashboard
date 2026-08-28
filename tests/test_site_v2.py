@@ -10,7 +10,7 @@ NODE = Path.home() / ".cache" / "codex-runtimes" / "codex-primary-runtime" / "de
 def test_site_v2_index_cache_busts_app_script():
     html = (PROJECT_ROOT / "site-v2" / "index.html").read_text(encoding="utf-8")
 
-    assert '<script src="./app.js?v=20260827-lazy-shards"></script>' in html
+    assert '<script src="./app.js?v=20260828-complete-dates"></script>' in html
     assert 'data-view-target="etf"' in html
     assert 'id="etfTable"' in html
 
@@ -119,6 +119,7 @@ globalThis.__api = {
   MA_WINDOWS,
   DATA_URL,
   currentDataUrl,
+  datesForCurrentDataset,
 };`,
   context
 );
@@ -254,6 +255,8 @@ api.state.data = {
     core: ["2026-05-20", "2026-05-23", "2026-06-01", "2026-06-10", "2026-06-22", "2026-07-03"],
     betting: ["2026-08-03"],
   },
+  commodityDates: ["2026-05-20", "2026-05-23", "2026-06-01", "2026-06-10", "2026-06-15", "2026-06-22", "2026-07-03"],
+  momentumDates: ["2026-06-10", "2026-06-15", "2026-06-22", "2026-07-03"],
   snapshots: {
     "core|2026-05-23": {
       latestRows: [
@@ -274,6 +277,11 @@ api.state.data = {
         { asset_key: "CHEM1|Chem One", asset_code: "CHEM1", day_trend: up, day_trend_duration: 1, week_trend: up, week_trend_duration: 2, month_trend: down, month_trend_duration: 3 },
         { asset_key: "CHEM2|Chem Two", asset_code: "CHEM2", day_trend: down, day_trend_duration: 4, week_trend: up, week_trend_duration: 5, month_trend: up, month_trend_duration: 6 },
         { asset_key: "GOLD1|Gold", asset_code: "GOLD1", day_trend: up, day_trend_duration: 7, week_trend: down, week_trend_duration: 8, month_trend: up, month_trend_duration: 9 },
+      ],
+    },
+    "core|2026-06-15": {
+      latestRows: [
+        { asset_key: "CHEM1|Chem One", asset_code: "CHEM1", day_trend: up, day_trend_duration: 6, week_trend: up, week_trend_duration: 7, month_trend: up, month_trend_duration: 8 },
       ],
     },
     "core|2026-06-22": {
@@ -378,7 +386,11 @@ api.state.data = {
   },
 };
 assert.strictEqual(api.selectedCoreDate(), "2026-06-22");
-assert.strictEqual(JSON.stringify(api.coreDatesInLast30Days("2026-06-22")), JSON.stringify(["2026-05-23", "2026-06-01", "2026-06-10", "2026-06-22"]));
+assert.strictEqual(JSON.stringify(api.coreDatesInLast30Days("2026-06-22")), JSON.stringify(["2026-05-23", "2026-06-01", "2026-06-10", "2026-06-15", "2026-06-22"]));
+api.state.activeView = "momentum";
+assert.strictEqual(JSON.stringify(api.datesForCurrentDataset()), JSON.stringify(["2026-06-10", "2026-06-15", "2026-06-22", "2026-07-03"]));
+api.state.activeView = "trend";
+assert.strictEqual(JSON.stringify(api.datesForCurrentDataset()), JSON.stringify(api.state.data.datesByType.core));
 assert.strictEqual(JSON.stringify(api.currentCommodityRows([
   { ...rows[1], asset_key: "A|Alpha" },
   { ...rows[2], asset_key: "C|Alpha" },
@@ -493,7 +505,7 @@ assert.ok(!context.__elements["#trendBars"].innerHTML.includes("黄金"));
 assert.strictEqual(context.__plots.length, 4);
 assert.strictEqual(JSON.stringify(context.__plots.map((plot) => plot[0])), JSON.stringify(["trend-化工品-0", "trend-化工品-1", "trend-化工品-2", "trend-化工品-3"]));
 assert.strictEqual(JSON.stringify(context.__plots[0][1].map((trace) => trace.name)), JSON.stringify(["日K", "周K", "月K"]));
-assert.strictEqual(JSON.stringify(context.__plots[0][1][0].y), JSON.stringify([1, -2, 3]));
+assert.strictEqual(JSON.stringify(context.__plots[0][1][0].y), JSON.stringify([1, 6, -2, 3]));
 api.selectTrendGroup("贵金属");
 assert.strictEqual(api.selectedTrendGroup(), "贵金属");
 assert.ok(context.__elements["#trendBars"].innerHTML.includes("黄金"));

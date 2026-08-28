@@ -198,11 +198,38 @@ def test_static_export_merges_domestic_main_and_exports_momentum(tmp_path):
     assert domestic_item["isDomestic"] is True
 
 
+def test_static_export_preserves_domestic_only_dates_for_trend_charts(tmp_path):
+    db = AssetDatabase(tmp_path / "signals.sqlite")
+    db.initialize()
+    core = ParsedDataset(
+        metadata=DatasetMetadata(date(2026, 8, 11), "core"),
+        source_path=Path("core.xlsx"),
+        source_hash="core-2026-08-11",
+        rows=[_sample_row("GC1!", "Gold Futures", "黄金期货")],
+    )
+    domestic = ParsedDataset(
+        metadata=DatasetMetadata(date(2026, 8, 12), "domestic_main"),
+        source_path=Path("domestic-main.xlsx"),
+        source_hash="domestic-main-2026-08-12",
+        rows=[_sample_row("EGL8", "乙二醇主连", "乙二醇主连")],
+    )
+    db.import_parsed_dataset(core, core.source_path)
+    db.import_parsed_dataset(domestic, domestic.source_path)
+
+    payload = build_static_payload(db.path, commodity_only=True)
+
+    assert payload["datesByType"]["core"] == ["2026-08-11"]
+    assert payload["commodityDates"] == ["2026-08-11", "2026-08-12"]
+    assert [row["asset_code"] for row in payload["snapshots"]["core|2026-08-12"]["latestRows"]] == ["EGL8"]
+    assert any(item["assetCode"] == "EGL8" for item in payload["futuresByDate"]["2026-08-12"])
+
+
 def test_static_export_writes_lazy_shards_without_losing_source_rows(tmp_path):
     payload = {
         "generatedAt": "2026-08-27T21:15:47",
         "datasetTypes": ["core", "betting"],
         "datesByType": {"core": ["2026-08-27"], "betting": ["2026-08-19"]},
+        "commodityDates": ["2026-08-27"],
         "snapshots": {
             "core|2026-08-27": {
                 "latestDate": "2026-08-27",
@@ -235,6 +262,7 @@ def test_static_export_writes_lazy_shards_without_losing_source_rows(tmp_path):
     assert snapshot["latestRows"] == payload["snapshots"]["core|2026-08-27"]["latestRows"]
     assert momentum == payload["momentumByDate"]["2026-08-27"]
     assert manifest["retainedData"]["momentumRowCount"] == 1
+    assert manifest["commodityDates"] == ["2026-08-27"]
     assert not (manifest_path.parent / "momentum-history-by-asset.json").exists()
 
 
