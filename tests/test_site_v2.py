@@ -10,7 +10,7 @@ NODE = Path.home() / ".cache" / "codex-runtimes" / "codex-primary-runtime" / "de
 def test_site_v2_index_cache_busts_app_script():
     html = (PROJECT_ROOT / "site-v2" / "index.html").read_text(encoding="utf-8")
 
-    assert '<script src="./app.js?v=20260828-complete-dates"></script>' in html
+    assert '<script src="./app.js?v=20260830-momentum-tracker"></script>' in html
     assert 'data-view-target="etf"' in html
     assert 'id="etfTable"' in html
 
@@ -613,7 +613,7 @@ def test_site_v2_index_uses_module_navigation():
     html = (PROJECT_ROOT / "site-v2" / "index.html").read_text(encoding="utf-8")
 
     assert 'class="module-nav"' in html
-    for view in ["overview", "long", "short", "early", "trajectory", "trend", "momentum", "search"]:
+    for view in ["overview", "long", "short", "early", "trajectory", "trend", "momentum", "momentum-tracker", "search"]:
         assert f'data-view-target="{view}"' in html
         assert f'data-view="{view}"' in html
 
