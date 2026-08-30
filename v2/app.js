@@ -11,6 +11,10 @@ const state = {
   earlySearch: "",
   momentumSearch: "",
   momentumState: "all",
+  trackingFilters: { search: "", datasetType: "all", momentumState: "all", barOne: false },
+  trackingAssetId: "",
+  trackingHistoryDate: "",
+  trackingRequest: 0,
   etfFilters: {
     search: "",
     relativeState: "all",
@@ -33,7 +37,7 @@ const GROUP_COLORS = {
 };
 
 const REQUIRED_FUTURES_GROUPS = ["化工品", "农产品", "有色", "贵金属", "黑色建材", "能源运输"];
-const VIEW_KEYS = ["overview", "long", "short", "early", "trajectory", "trend", "momentum", "search", "etf"];
+const VIEW_KEYS = ["overview", "long", "short", "early", "trajectory", "trend", "momentum", "momentum-tracker", "search", "etf"];
 const MA_WINDOWS = [5, 10, 20, 60, 250];
 const RELATIVE_STATE_QUADRANTS = {
   improving: { label: "Improving", xSign: -1, ySign: 1 },
@@ -198,7 +202,7 @@ function syncDateSelect() {
 
 function datesForCurrentDataset(view = selectedView()) {
   if (state.datasetKey === "betting") return state.data?.datesByType?.betting || [];
-  if (view === "momentum") return state.data?.momentumDates || state.data?.datesByType?.core || [];
+  if (["momentum", "momentum-tracker"].includes(view)) return state.data?.momentumDates || state.data?.datesByType?.core || [];
   return state.data?.datesByType?.core || [];
 }
 
@@ -272,6 +276,10 @@ async function ensureTrendSnapshots(date = state.date) {
 }
 
 async function ensureViewData(view = selectedView()) {
+  if (view === "momentum-tracker") {
+    await ensureMomentum(state.date);
+    return;
+  }
   await ensureSnapshot(state.datasetKey, state.date);
   if (state.datasetKey === "betting") return;
   await ensureFutures(state.date);
@@ -284,13 +292,37 @@ async function refreshCurrentView() {
   if (!state.data) return;
   const generated = document.querySelector("#generatedAt");
   if (generated) generated.textContent = `数据加载中；当前日期：${state.date || "-"}`;
-  await ensureViewData(selectedView());
+  const view = selectedView();
+  const date = state.date;
+  if (view === "momentum-tracker") {
+    ["#trackingMetrics", "#trackingCurrent", "#trackingTable", "#trackingHistory"].forEach((selector) => {
+      document.querySelector(selector).innerHTML = "";
+    });
+    document.querySelector("#trackingFilterStatus").textContent = "正在加载当前日期的动能记录…";
+    document.querySelector("#trackingCurrentTitle").textContent = "";
+    document.querySelector("#trackingAsset").innerHTML = "";
+  }
+  try {
+    await ensureViewData(view);
+  } catch (error) {
+    if (view !== "momentum-tracker") throw error;
+    if (selectedView() === view && state.date === date) {
+      document.querySelector("#trackingTable").innerHTML = `<div class="empty" role="alert">当前动能数据加载失败：${escapeHtml(error.message)}。请重新选择日期或进入本板块重试。</div>`;
+      document.querySelector("#trackingFilterStatus").textContent = "数据未加载，不展示旧日期记录。";
+      if (generated) generated.textContent = `数据加载失败；当前日期：${date}`;
+    }
+    return;
+  }
   renderCurrentView();
 }
 
 function renderCurrentView() {
   const snapshot = currentSnapshot();
   document.querySelector("#generatedAt").textContent = `数据生成：${state.data.generatedAt}；当前日期：${state.date || "-"}`;
+  if (selectedView() === "momentum-tracker") {
+    renderMomentumTracker();
+    return;
+  }
   if (!snapshot) return;
   if (state.datasetKey === "betting") {
     renderEtf();
@@ -966,6 +998,136 @@ function renderMomentum() {
   document.querySelector("#momentumNewStates").innerHTML = tableHtml(fresh, MOMENTUM_COLUMNS);
   document.querySelector("#momentumTable").innerHTML = tableHtml(rows, MOMENTUM_COLUMNS);
   drawMomentumScatter(rows);
+}
+
+const TRACKING_FIELDS = [
+  ["current_momentum_state", "当前动能状态"],
+  ["momentum_value", "动能数值"],
+  ["current_momentum_state_duration", "当前动能状态持续时间（bar）"],
+  ["current_momentum_state_return", "当前动能状态累积涨跌幅（%）"],
+];
+
+function trackingAssetId(row) {
+  return JSON.stringify([row.dataset_type || "core", row.asset_key || `${row.asset_code}|${row.asset_name}`]);
+}
+
+function trackingRows(date = state.date) {
+  return (state.data?.momentumByDate?.[date] || []).filter((row) => ["core", "domestic_main"].includes(row.dataset_type || "core"));
+}
+
+function filteredTrackingRows() {
+  const filters = state.trackingFilters;
+  const query = text(filters.search).toLowerCase();
+  return trackingRows().filter((row) =>
+    (filters.datasetType === "all" || (row.dataset_type || "core") === filters.datasetType) &&
+    (filters.momentumState === "all" || momentumStateKind(row) === filters.momentumState) &&
+    (!filters.barOne || optionalNumber(row.current_momentum_state_duration) === 1) &&
+    (!query || [row.asset_code, row.asset_name_cn, row.asset_name].map(text).join(" ").toLowerCase().includes(query))
+  ).sort((a, b) =>
+    (optionalNumber(a.current_momentum_state_duration) ?? Infinity) - (optionalNumber(b.current_momentum_state_duration) ?? Infinity) ||
+    text(a.asset_code).localeCompare(text(b.asset_code))
+  );
+}
+
+function trackingCell(key, row) {
+  if (key === "current_momentum_state") return text(row[key]) ? formatCell(key, row) : "—";
+  const value = optionalNumber(row[key]);
+  if (value === null) return "—";
+  if (key === "current_momentum_state_return") return `${value.toFixed(2)}%`;
+  if (key === "momentum_value") return new Intl.NumberFormat("zh-CN", { maximumSignificantDigits: 6, useGrouping: false }).format(value);
+  return escapeHtml(String(value));
+}
+
+function setTrackingFilter(key, value) {
+  if (!(key in state.trackingFilters)) return;
+  state.trackingFilters[key] = key === "barOne" ? Boolean(value) : text(value);
+  renderMomentumTracker();
+}
+
+function selectTrackingAsset(id) {
+  if (!filteredTrackingRows().some((row) => trackingAssetId(row) === id)) return;
+  state.trackingAssetId = id;
+  renderMomentumTracker();
+}
+
+function trackingHistoryDates(endDate = state.date) {
+  const cutoff = monthCutoff(endDate);
+  return (state.data?.momentumDates || []).filter((date) => date >= cutoff && date <= endDate);
+}
+
+function trackingHistory(id = state.trackingAssetId, endDate = state.date) {
+  return trackingHistoryDates(endDate).map((date) => ({
+    date,
+    row: trackingRows(date).find((row) => trackingAssetId(row) === id) || null,
+  }));
+}
+
+async function loadTrackingHistory() {
+  const endDate = state.date;
+  const request = ++state.trackingRequest;
+  const panel = document.querySelector("#trackingHistory");
+  panel.innerHTML = '<div class="empty" role="status">正在按需加载近 30 天动能记录…</div>';
+  try {
+    const dates = trackingHistoryDates(endDate);
+    for (let index = 0; index < dates.length; index += 4) {
+      await Promise.all(dates.slice(index, index + 4).map((date) => ensureMomentum(date)));
+    }
+    if (request !== state.trackingRequest || state.date !== endDate || selectedView() !== "momentum-tracker") return;
+    state.trackingHistoryDate = endDate;
+    renderTrackingHistory();
+  } catch (error) {
+    if (request !== state.trackingRequest || state.date !== endDate || selectedView() !== "momentum-tracker") return;
+    panel.innerHTML = `<div class="empty" role="alert">历史数据加载未完成：${escapeHtml(error.message)}。请点击“查看近30天历史”重试。</div>`;
+  }
+}
+
+function renderMomentumTracker() {
+  const rows = filteredTrackingRows();
+  if (!rows.some((row) => trackingAssetId(row) === state.trackingAssetId)) state.trackingAssetId = rows.length ? trackingAssetId(rows[0]) : "";
+  const selected = rows.find((row) => trackingAssetId(row) === state.trackingAssetId);
+  const counts = [["显示标的", rows.length], ["正动能", rows.filter((r) => momentumStateKind(r) === "positive").length], ["负动能", rows.filter((r) => momentumStateKind(r) === "negative").length], ["打点", rows.filter((r) => momentumStateKind(r) === "dot").length], ["新状态 bar=1", rows.filter((r) => optionalNumber(r.current_momentum_state_duration) === 1).length]];
+  document.querySelector("#trackingMetrics").innerHTML = counts.map(([label, value]) => `<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join("");
+  document.querySelector("#trackingFilterStatus").textContent = `${rows.length} / ${trackingRows().length} 条记录；按持续 bar 从小到大`;
+  const select = document.querySelector("#trackingAsset");
+  select.innerHTML = rows.map((row) => `<option value="${escapeHtml(trackingAssetId(row))}">${escapeHtml(`${displayName(row)} ${row.asset_code} · ${row.dataset_type === "domestic_main" ? "内地主连" : "核心"}`)}</option>`).join("");
+  select.value = state.trackingAssetId;
+  document.querySelector("#trackingCurrentTitle").textContent = selected ? `${displayName(selected)} ${selected.asset_code} · ${state.date}` : "暂无匹配标的";
+  document.querySelector("#trackingCurrent").innerHTML = selected ? TRACKING_FIELDS.map(([key, label]) => `<div class="metric"><span>${label}</span><strong>${trackingCell(key, selected)}</strong></div>`).join("") : "";
+  const headers = ["标的", "来源", ...TRACKING_FIELDS.map(([, label]) => label)];
+  document.querySelector("#trackingTable").innerHTML = rows.length ? `<div class="table-wrap"><table><thead><tr>${headers.map((label) => `<th>${label}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr class="${optionalNumber(row.current_momentum_state_duration) === 1 ? "bar-one" : ""}"><td><button class="tracking-asset-link" type="button" data-asset-id="${escapeHtml(trackingAssetId(row))}" onclick="selectTrackingAsset(this.dataset.assetId)">${escapeHtml(`${displayName(row)} ${row.asset_code}`)}</button></td><td>${row.dataset_type === "domestic_main" ? "内地主连" : "核心"}</td>${TRACKING_FIELDS.map(([key]) => `<td>${trackingCell(key, row)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>` : '<div class="empty">暂无匹配的动能记录，请调整筛选条件。</div>';
+  renderTrackingHistory();
+}
+
+function renderTrackingHistory() {
+  const panel = document.querySelector("#trackingHistory");
+  if (!state.trackingAssetId) {
+    panel.innerHTML = '<div class="empty">请选择有数据的标的。</div>';
+    return;
+  }
+  if (state.trackingHistoryDate !== state.date) {
+    panel.innerHTML = '<div class="empty">点击“查看近30天历史”加载该时期记录，首屏不下载历史数据。</div>';
+    return;
+  }
+  const history = trackingHistory();
+  const colors = history.map(({ row }) => ({ positive: "#ff5c7a", negative: "#2ecc71", dot: "#f2c94c" }[momentumStateKind(row)] || "#8b9bb0"));
+  panel.innerHTML = '<div id="trackingChart" class="tracking-chart"></div>';
+  const traces = ["momentum_value", "current_momentum_state_duration", "current_momentum_state_return"].map((key, index) => ({
+    type: index === 1 ? "bar" : "scatter", mode: "lines+markers", name: TRACKING_FIELDS.find(([field]) => field === key)[1],
+    x: history.map((item) => item.date), y: history.map(({ row }) => optionalNumber(row?.[key])),
+    yaxis: index ? `y${index + 1}` : "y", connectgaps: false,
+    marker: { color: colors, size: 7 }, line: { color: "#8b9bb0", width: 1.5 },
+    customdata: history.map(({ row }) => escapeHtml(text(row?.current_momentum_state) || "当日无记录")),
+    hovertemplate: `%{x}<br>状态=%{customdata}<br>%{y}${index === 2 ? "%" : ""}<extra>%{fullData.name}</extra>`,
+  }));
+  Plotly.newPlot("trackingChart", traces, {
+    height: 590, paper_bgcolor: "#101820", plot_bgcolor: "#101820", font: { color: "#e6edf3" },
+    margin: { l: 85, r: 25, t: 18, b: 48 }, showlegend: false, hovermode: "x unified",
+    xaxis: { type: "date", title: "日期", anchor: "y3" },
+    yaxis: { title: "动能数值", domain: [0.7, 1], zerolinecolor: "#8b9bb0" },
+    yaxis2: { title: "状态持续 bar", domain: [0.36, 0.63], anchor: "x", rangemode: "tozero" },
+    yaxis3: { title: "状态累计涨跌幅 %", domain: [0, 0.29], anchor: "x", zerolinecolor: "#8b9bb0" },
+  }, { displayModeBar: false, responsive: true });
+  panel.insertAdjacentHTML("beforeend", `<p class="rule">红点=正动能，绿点=负动能，黄点=打点。状态以源表为准；缺记录留空、不补零，状态切换时累计涨跌幅按源表重新起算。</p><div class="table-wrap"><table><thead><tr><th>日期</th>${TRACKING_FIELDS.map(([, label]) => `<th>${label}</th>`).join("")}</tr></thead><tbody>${[...history].reverse().map(({ date, row }) => `<tr><td>${date}</td>${TRACKING_FIELDS.map(([key]) => `<td>${row ? trackingCell(key, row) : "—"}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`);
 }
 
 function drawMomentumScatter(rows) {

@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" href="data:," />
     <title>商品与 ETF 数据面板 v2</title>
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=20260830-momentum-tracker" />
     <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
   </head>
   <body data-active-view="overview">
@@ -38,6 +38,7 @@
       <button class="module-button" type="button" data-view-target="trajectory" onclick="selectView('trajectory')">四象限轨迹</button>
       <button class="module-button" type="button" data-view-target="trend" onclick="selectView('trend')">三级别趋势</button>
       <button class="module-button" type="button" data-view-target="momentum" onclick="selectView('momentum')">动量状态</button>
+      <button class="module-button" type="button" data-view-target="momentum-tracker" onclick="selectView('momentum-tracker')">动能跟踪</button>
       <button class="module-button" type="button" data-view-target="search" onclick="selectView('search')">搜索</button>
       <button class="module-button" type="button" data-view-target="etf" onclick="selectView('etf')">ETF 押注工具</button>
     </nav>
@@ -145,6 +146,31 @@
         <div id="momentumTable"></div>
       </section>
 
+      <section data-view="momentum-tracker">
+        <h2>动能跟踪</h2>
+        <p class="rule">集中查看当前动能状态、动能数值、当前动能状态持续时间和当前动能状态累积涨跌幅。覆盖核心数据集与内地主连的全部标的；“押注工具”数据保留在原 ETF 独立板块。所有指标沿用 Excel 原值，累计涨跌幅不是单日收益，不构成投资建议。</p>
+        <div class="tracking-controls">
+          <label>动能标的搜索<input id="trackingSearch" type="search" placeholder="代码 / 中文 / 英文名称" oninput="setTrackingFilter('search', this.value)" /></label>
+          <label>数据来源<select id="trackingSource" onchange="setTrackingFilter('datasetType', this.value)"><option value="all">核心 + 内地主连</option><option value="core">核心数据集</option><option value="domestic_main">内地主连</option></select></label>
+          <label>当前动能状态筛选<select id="trackingState" onchange="setTrackingFilter('momentumState', this.value)"><option value="all">全部状态</option><option value="positive">正动能</option><option value="negative">负动能</option><option value="dot">打点</option></select></label>
+          <label class="tracking-checkbox"><input id="trackingBarOne" type="checkbox" onchange="setTrackingFilter('barOne', this.checked)" />仅看新状态 bar=1</label>
+        </div>
+        <p id="trackingFilterStatus" class="filter-status" aria-live="polite"></p>
+        <div id="trackingMetrics" class="metrics tracking-metrics"></div>
+        <div class="tracking-detail subsection">
+          <div class="tracking-controls">
+            <label>查看标的<select id="trackingAsset" onchange="selectTrackingAsset(this.value)"></select></label>
+            <button class="secondary-button" type="button" onclick="loadTrackingHistory()">查看近30天历史</button>
+          </div>
+          <h3 id="trackingCurrentTitle"></h3>
+          <div id="trackingCurrent" class="metrics tracking-current"></div>
+          <div id="trackingHistory"></div>
+        </div>
+        <h3>四项动能指标完整明细</h3>
+        <p class="rule">持续时间为 1 的行标黄；点击标的名称可切换上方详情。缺失值显示“—”，真实零值保留为 0。</p>
+        <div id="trackingTable"></div>
+      </section>
+
       <section data-view="search">
         <h2>六、搜索</h2>
         <p class="chart-request">【输入关键字 显示所有相关标的的面板数据 并给出判断多空】</p>
@@ -226,6 +252,6 @@
       </section>
     </main>
 
-    <script src="./app.js?v=20260828-complete-dates"></script>
+    <script src="./app.js?v=20260830-momentum-tracker"></script>
   </body>
 </html>
