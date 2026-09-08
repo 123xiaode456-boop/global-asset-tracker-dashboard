@@ -1528,11 +1528,15 @@ function sumTrendBars(rows, period) {
 
 function trendBarValue(row, period) {
   if (!row) return null;
-  const trend = row[`${period}_trend`];
-  const duration = number(row[`${period}_trend_duration`]);
+  const trend = text(row[`${period}_trend`]);
+  if (!trend) return null;
+  const rawDuration = row[`${period}_trend_duration`];
+  const duration = optionalNumber(rawDuration);
+  if (!text(rawDuration) || duration === null) return null;
+  if (isFlat(trend)) return 0;
   if (isUp(trend)) return duration;
   if (isDown(trend)) return -duration;
-  return 0;
+  return null;
 }
 
 function periodLabel(period) {
