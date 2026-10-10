@@ -1008,7 +1008,12 @@ const TRACKING_FIELDS = [
 ];
 
 function trackingAssetId(row) {
-  return JSON.stringify([row.dataset_type || "core", row.asset_key || `${row.asset_code}|${row.asset_name}`]);
+  return JSON.stringify([row.history_dataset_type || row.dataset_type || "core", row.asset_key || `${row.asset_code}|${row.asset_name}`]);
+}
+
+function trackingSourceLabel(row) {
+  if (row.history_dataset_type === "domestic_main" && row.dataset_type === "core") return "内地主连（现核心表）";
+  return row.dataset_type === "domestic_main" ? "内地主连" : "核心";
 }
 
 function trackingRows(date = state.date) {
@@ -1019,7 +1024,7 @@ function filteredTrackingRows() {
   const filters = state.trackingFilters;
   const query = text(filters.search).toLowerCase();
   return trackingRows().filter((row) =>
-    (filters.datasetType === "all" || (row.dataset_type || "core") === filters.datasetType) &&
+    (filters.datasetType === "all" || (row.history_dataset_type || row.dataset_type || "core") === filters.datasetType) &&
     (filters.momentumState === "all" || momentumStateKind(row) === filters.momentumState) &&
     (!filters.barOne || optionalNumber(row.current_momentum_state_duration) === 1) &&
     (!query || [row.asset_code, row.asset_name_cn, row.asset_name].map(text).join(" ").toLowerCase().includes(query))
@@ -1089,12 +1094,12 @@ function renderMomentumTracker() {
   document.querySelector("#trackingMetrics").innerHTML = counts.map(([label, value]) => `<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join("");
   document.querySelector("#trackingFilterStatus").textContent = `${rows.length} / ${trackingRows().length} 条记录；按持续 bar 从小到大`;
   const select = document.querySelector("#trackingAsset");
-  select.innerHTML = rows.map((row) => `<option value="${escapeHtml(trackingAssetId(row))}">${escapeHtml(`${displayName(row)} ${row.asset_code} · ${row.dataset_type === "domestic_main" ? "内地主连" : "核心"}`)}</option>`).join("");
+  select.innerHTML = rows.map((row) => `<option value="${escapeHtml(trackingAssetId(row))}">${escapeHtml(`${displayName(row)} ${row.asset_code} · ${trackingSourceLabel(row)}`)}</option>`).join("");
   select.value = state.trackingAssetId;
   document.querySelector("#trackingCurrentTitle").textContent = selected ? `${displayName(selected)} ${selected.asset_code} · ${state.date}` : "暂无匹配标的";
   document.querySelector("#trackingCurrent").innerHTML = selected ? TRACKING_FIELDS.map(([key, label]) => `<div class="metric"><span>${label}</span><strong>${trackingCell(key, selected)}</strong></div>`).join("") : "";
   const headers = ["标的", "来源", ...TRACKING_FIELDS.map(([, label]) => label)];
-  document.querySelector("#trackingTable").innerHTML = rows.length ? `<div class="table-wrap"><table><thead><tr>${headers.map((label) => `<th>${label}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr class="${optionalNumber(row.current_momentum_state_duration) === 1 ? "bar-one" : ""}"><td><button class="tracking-asset-link" type="button" data-asset-id="${escapeHtml(trackingAssetId(row))}" onclick="selectTrackingAsset(this.dataset.assetId)">${escapeHtml(`${displayName(row)} ${row.asset_code}`)}</button></td><td>${row.dataset_type === "domestic_main" ? "内地主连" : "核心"}</td>${TRACKING_FIELDS.map(([key]) => `<td>${trackingCell(key, row)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>` : '<div class="empty">暂无匹配的动能记录，请调整筛选条件。</div>';
+  document.querySelector("#trackingTable").innerHTML = rows.length ? `<div class="table-wrap"><table><thead><tr>${headers.map((label) => `<th>${label}</th>`).join("")}</tr></thead><tbody>${rows.map((row) => `<tr class="${optionalNumber(row.current_momentum_state_duration) === 1 ? "bar-one" : ""}"><td><button class="tracking-asset-link" type="button" data-asset-id="${escapeHtml(trackingAssetId(row))}" onclick="selectTrackingAsset(this.dataset.assetId)">${escapeHtml(`${displayName(row)} ${row.asset_code}`)}</button></td><td>${trackingSourceLabel(row)}</td>${TRACKING_FIELDS.map(([key]) => `<td>${trackingCell(key, row)}</td>`).join("")}</tr>`).join("")}</tbody></table></div>` : '<div class="empty">暂无匹配的动能记录，请调整筛选条件。</div>';
   renderTrackingHistory();
 }
 
@@ -1353,7 +1358,7 @@ function domesticFuturesMetaForRow(row) {
   const items = state.data?.futuresByDate?.[state.date] || [];
   const key = text(row.asset_key);
   const code = text(row.asset_code);
-  return items.find((item) => (key && text(item.assetKey) === key) || (code && text(item.assetCode) === code)) || null;
+  return items.find((item) => key && item.assetKey ? text(item.assetKey) === key : code && text(item.assetCode) === code) || null;
 }
 
 function drawLiveMinuteKline(elementId, row) {
@@ -1605,7 +1610,8 @@ function selectTrendGroup(group) {
 }
 
 function rowMatchesFuturesItem(row, item) {
-  return text(row.asset_key) === text(item.assetKey) || text(row.asset_code) === text(item.assetCode);
+  if (row.asset_key && item.assetKey) return text(row.asset_key) === text(item.assetKey);
+  return Boolean(row.asset_code && item.assetCode) && text(row.asset_code) === text(item.assetCode);
 }
 
 function futuresDisplayName(item) {
