@@ -151,7 +151,7 @@
         <p class="rule">集中查看当前动能状态、动能数值、当前动能状态持续时间和当前动能状态累积涨跌幅。覆盖核心数据集与内地主连的全部标的；“押注工具”数据保留在原 ETF 独立板块。所有指标沿用 Excel 原值，累计涨跌幅不是单日收益，不构成投资建议。</p>
         <div class="tracking-controls">
           <label>动能标的搜索<input id="trackingSearch" type="search" placeholder="代码 / 中文 / 英文名称" oninput="setTrackingFilter('search', this.value)" /></label>
-          <label>数据来源<select id="trackingSource" onchange="setTrackingFilter('datasetType', this.value)"><option value="all">核心 + 内地主连</option><option value="core">核心数据集</option><option value="domestic_main">内地主连</option></select></label>
+          <label>品种来源<select id="trackingSource" onchange="setTrackingFilter('datasetType', this.value)"><option value="all">核心 + 内地主连</option><option value="core">核心数据集</option><option value="domestic_main">内地主连（含已并入核心）</option></select></label>
           <label>当前动能状态筛选<select id="trackingState" onchange="setTrackingFilter('momentumState', this.value)"><option value="all">全部状态</option><option value="positive">正动能</option><option value="negative">负动能</option><option value="dot">打点</option></select></label>
           <label class="tracking-checkbox"><input id="trackingBarOne" type="checkbox" onchange="setTrackingFilter('barOne', this.checked)" />仅看新状态 bar=1</label>
         </div>
@@ -252,6 +252,6 @@
       </section>
     </main>
 
-    <script src="./app.js?v=20260908-trend-missing"></script>
+  <script src="./app.js?v=20261010-source-identity"></script>
   </body>
 </html>
